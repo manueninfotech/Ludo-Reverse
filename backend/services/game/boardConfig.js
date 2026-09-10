@@ -53,20 +53,21 @@ const STANDARD_BOARD = {
 
   // Starting cell of each player
   startCells: {
-    red: 0,
-    green: 13,
-    yellow: 26,
-    blue: 39,
-  },
+  red: 0,
+  green: 13,
+  yellow: 39,
+  blue: 26,
+},
+
 
   // Last shared-track cell before entering
   // the player's private home path
   homeEntryCells: {
-    red: 51,
-    green: 12,
-    yellow: 25,
-    blue: 38,
-  },
+  red: 50,
+  green: 11,
+  yellow: 37,
+  blue: 24,
+},
 
   // Standard Ludo safe/star cells
   safeCells: [
@@ -86,7 +87,7 @@ const STANDARD_BOARD = {
   // Progress value when the coin is finished
   // 52-56 = home path
   // 57 = finished
-  finishPosition: 57,
+  finishPosition: 56,
 
   // Every player has 4 coins
   coinsPerPlayer: 4,

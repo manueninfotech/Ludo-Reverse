@@ -125,6 +125,60 @@ const players = [
   console.log("✓ next player");
 }
 
+// ============================================================
+// 4. FINISHED PLAYER IS SKIPPED
+// ============================================================
+
+{
+  const playersWithFinishedPlayer = [
+    {
+      ...players[0],
+      coins: [
+        { area: "base" },
+        { area: "base" },
+        { area: "base" },
+        { area: "base" },
+      ],
+    },
+
+    {
+      ...players[1],
+      coins: [
+        { area: "finished" },
+        { area: "finished" },
+        { area: "finished" },
+        { area: "finished" },
+      ],
+    },
+
+    {
+      ...players[2],
+      coins: [
+        { area: "base" },
+        { area: "base" },
+        { area: "base" },
+        { area: "base" },
+      ],
+    },
+  ];
+
+  const nextPlayer = getNextPlayer({
+    players: playersWithFinishedPlayer,
+    currentPlayerId: "user-1",
+  });
+
+  assert.ok(nextPlayer);
+
+  assert.equal(
+    nextPlayer.userId,
+    "user-3"
+  );
+
+  console.log(
+    "✓ finished player is skipped"
+  );
+}
+
 
 // ============================================================
 // 4. TURN TIMES

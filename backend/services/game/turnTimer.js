@@ -8,6 +8,8 @@ import {
 
 const TURN_TIME_MS = 30 * 1000;
 
+const MAX_MISSED_TURNS = 5;
+
 const activeTimers = new Map();
 
 /**
@@ -151,10 +153,137 @@ export const startTurnTimer = ({
   });
 };
 
+
+const registerMissedTurn = ({
+  room,
+  playerId,
+}) => {
+  if (!room?.game) {
+    return {
+      missedTurns: 0,
+      disconnected: false,
+    };
+  }
+
+  let missedTurns = 0;
+
+  room.game = {
+    ...room.game,
+
+    players: room.game.players.map((player) => {
+      if (player.userId !== playerId) {
+        return player;
+      }
+
+      missedTurns =
+        (player.missedTurns ?? 0) + 1;
+
+      return {
+        ...player,
+        missedTurns,
+      };
+    }),
+  };
+
+  return {
+    missedTurns,
+    disconnected:
+      missedTurns >= MAX_MISSED_TURNS,
+  };
+};
+
+const disconnectTimedOutPlayer = ({
+  io,
+  room,
+  playerId,
+}) => {
+  clearTurnTimer({
+    roomId: room.roomId,
+  });
+
+  room.game = {
+    ...room.game,
+
+    players: room.game.players.map((player) => {
+      if (player.userId !== playerId) {
+        return player;
+      }
+
+      return {
+        ...player,
+        isConnected: false,
+      };
+    }),
+  };
+
+  const connectedPlayers =
+    room.game.players.filter(
+      (player) => player.isConnected !== false
+    );
+
+  // 2-player game:
+  // remaining player wins immediately.
+  if (connectedPlayers.length === 1) {
+    const winner = connectedPlayers[0];
+
+    room.game = {
+      ...room.game,
+      status: "finished",
+      winnerId: winner.userId,
+      currentTurn: {
+        ...room.game.currentTurn,
+        turnExpiresAt: null,
+      },
+    };
+
+    io.to(room.roomId).emit("game_finished", {
+      game: room.game,
+      winner,
+      reason: "player_auto_disconnected",
+    });
+
+    return;
+  }
+
+  // 3+ player game:
+  // skip the disconnected player.
+  const result = completeGameTurn({
+    game: room.game,
+  });
+
+  if (!result.success) {
+    console.error(
+      "Failed to skip automatically disconnected player:",
+      result.reason
+    );
+    return;
+  }
+
+  room.game = result.game;
+
+  io.to(room.roomId).emit("player_disconnected", {
+    playerId,
+    reason: "miss_limit_reached",
+    game: room.game,
+  });
+
+  io.to(room.roomId).emit("turn_changed", {
+    game: room.game,
+    auto: true,
+  });
+
+  if (room.game.status === "playing") {
+    startTurnTimer({
+      io,
+      room,
+    });
+  }
+};
+
 /**
  * Handle a 30-second timeout.
  */
-const handleTurnTimeout = async ({
+export const handleTurnTimeout = async ({
   io,
   room,
   playerId,
@@ -176,6 +305,29 @@ const handleTurnTimeout = async ({
   ) {
     return;
   }
+
+  const missResult = registerMissedTurn({
+  room,
+  playerId,
+});
+
+console.log(
+  `[TURN TIMER] ${room.roomId} - ${playerId} missed turn ${missResult.missedTurns}/${MAX_MISSED_TURNS}`
+);
+
+if (missResult.disconnected) {
+  console.log(
+    `[TURN TIMER] ${room.roomId} - ${playerId} reached ${MAX_MISSED_TURNS} missed turns and was automatically disconnected`
+  );
+
+  disconnectTimedOutPlayer({
+    io,
+    room,
+    playerId,
+  });
+
+  return;
+}
 
   /**
    * CASE 1:
@@ -265,26 +417,19 @@ const rollResult = rollGameDice({
      * Otherwise give the player another 30 seconds
      * to choose a coin.
      */
-    if (shouldAutoMove({
-      game: room.game,
-      legalMoves,
-    })) {
-      await performAutomaticMove({
-        io,
-        room,
-        legalMoves,
-      });
-
-      return;
-    }
-
-    /**
-     * Manual movement is required.
-     * Give the player another 30 seconds.
+        /**
+     * A legal move exists.
+     *
+     * Since the player already used the full 30 seconds
+     * without rolling, the server has auto-rolled the dice.
+     *
+     * Auto-roll must immediately auto-move a legal coin.
+     * No second movement timer is given.
      */
-    startTurnTimer({
+    await performAutomaticMove({
       io,
       room,
+      legalMoves,
     });
 
     return;

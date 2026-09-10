@@ -115,12 +115,32 @@ export const getNextPlayer = ({
     return null;
   }
 
-  const nextIndex = getNextPlayerIndex({
-    currentIndex,
-    playerCount: players.length,
-  });
+  // Check every player after the current player,
+  // wrapping around the player list.
+  for (let step = 1; step <= players.length; step++) {
+    const nextIndex =
+      (currentIndex + step) % players.length;
 
-  return players[nextIndex];
+    const nextPlayer = players[nextIndex];
+
+    // A player who has finished all 4 coins
+    // must not receive another turn.
+    const hasFinished =
+      Array.isArray(nextPlayer.coins) &&
+      nextPlayer.coins.length === 4 &&
+      nextPlayer.coins.every(
+        (coin) => coin.area === "finished"
+      );
+
+    const isDisconnected =
+      nextPlayer.isConnected === false;
+
+    if (!hasFinished && !isDisconnected) {
+      return nextPlayer;
+    }
+  }
+
+  return null;
 };
 
 

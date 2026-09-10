@@ -58,7 +58,7 @@ const homeCoin = (progress) => ({
 const finishedCoin = {
   coinId: "red-1",
   area: "finished",
-  progress: 57,
+  progress: 56,
   absoluteCell: null,
 };
 
@@ -122,24 +122,24 @@ test(
 );
 
 test(
-  "Progress 51 is main",
-  getAreaFromProgress(51, 4) === "main"
+  "Progress 51 is home",
+  getAreaFromProgress(51, 4, "red") === "home"
 );
 
 test(
   "Progress 52 is home",
-  getAreaFromProgress(52, 4) === "home"
+  getAreaFromProgress(52, 4, "red") === "home"
 );
 
 test(
-  "Progress 56 is home",
-  getAreaFromProgress(56, 4) === "home"
+  "Progress 55 is home",
+  getAreaFromProgress(55, 4, "red") === "home"
 );
 
 test(
-  "Progress 57 is finished",
-  getAreaFromProgress(57, 4) === "finished"
-);
+  "Progress 56 is finished",
+  getAreaFromProgress(56, 4, "red") === "finished"
+);  
 
 
 // ============================================================
@@ -440,7 +440,7 @@ const exactFinish = calculateMovement({
   playerColor: "red",
   playerCount: 4,
   coin: homeCoin(55),
-  diceValue: 2,
+  diceValue: 1,
   direction: "forward",
 });
 
@@ -451,7 +451,7 @@ test(
 
 test(
   "Coin reaches finish position",
-  exactFinish.toProgress === 57
+  exactFinish.toProgress === 56
 );
 
 test(
@@ -608,7 +608,7 @@ console.log("\n========== POSSIBLE MOVES TESTS ==========\n");
 const possibleMoves = getPossibleMoves({
   playerColor: "red",
   playerCount: 4,
-  coin: mainCoin(10),
+  coins: [mainCoin(10)],
   diceValue: 3,
 });
 

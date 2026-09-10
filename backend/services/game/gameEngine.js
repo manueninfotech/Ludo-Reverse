@@ -116,6 +116,9 @@ export const createInitialGameState = ({
 
         isConnected:
           player.isConnected ?? true,
+
+        missedTurns:
+          player.missedTurns ?? 0,
       };
     }
   );
@@ -219,6 +222,7 @@ export const getCoin = ({
 
 export const rollGameDice = ({
   game,
+  playerId,
   diceValue,
 }) => {
   if (!game) {
@@ -248,6 +252,16 @@ export const rollGameDice = ({
       game,
     };
   }
+
+  if (
+  playerId &&
+  game.currentTurn.playerId !== playerId
+) {
+  return {
+    success: false,
+    reason: "It is not this player's turn.",
+  };
+}
 
   if (!isValidDiceValue(diceValue)) {
     return {

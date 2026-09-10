@@ -255,14 +255,14 @@ const players6 = [
   );
 
   assert.equal(
-    game.players[2].startCell,
-    26
-  );
+  game.players[2].startCell,
+  39
+);
 
-  assert.equal(
-    game.players[3].startCell,
-    39
-  );
+assert.equal(
+  game.players[3].startCell,
+  26
+);
 
   console.log("✓ player start cells assigned");
 }
@@ -1167,7 +1167,7 @@ const players6 = [
               return {
                 ...coin,
                 area: "finished",
-                progress: 57,
+                progress: 56,
                 absoluteCell: null,
               };
             }
@@ -1226,7 +1226,7 @@ const players6 = [
           return {
             ...coin,
             area: "home",
-            progress: 55,
+            progress: 54,
             absoluteCell: null,
           };
         }),
@@ -1256,7 +1256,7 @@ const players6 = [
     );
 
   assert.equal(movedCoin.area, "finished");
-  assert.equal(movedCoin.progress, 57);
+  assert.equal(movedCoin.progress, 56);
 
   // Finishing gives the same player another turn.
   assert.equal(
@@ -1445,7 +1445,7 @@ const players6 = [
             (coin) => ({
               ...coin,
               area: "finished",
-              progress: 57,
+              progress: 56,
               absoluteCell: null,
             })
           ),
@@ -1494,7 +1494,7 @@ const players6 = [
             (coin) => ({
               ...coin,
               area: "finished",
-              progress: 57,
+              progress: 56,
               absoluteCell: null,
             })
           ),

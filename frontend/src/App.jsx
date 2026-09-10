@@ -10,18 +10,31 @@ function App() {
 
   const [selectedPlayerCount, setSelectedPlayerCount] = useState(2);
 
-  const [userId, setUserId] = useState("");
-  const [name, setName] = useState(""); 
+  const [userId, setUserId] = useState(
+  () => localStorage.getItem("reverseLudo_userId") || ""
+);
 
-  const [roomIdInput, setRoomIdInput] = useState("");
+const [name, setName] = useState(
+  () => localStorage.getItem("reverseLudo_name") || ""
+);
+
+const [color, setColor] = useState(
+  () => localStorage.getItem("reverseLudo_color") || "red"
+);
+
+const [roomIdInput, setRoomIdInput] = useState(
+  () => localStorage.getItem("reverseLudo_roomId") || ""
+);
   const [room, setRoom] = useState(null);
   const [game, setGame] = useState(null);
+  const [winner, setWinner] = useState(null);
 
   const [message, setMessage] = useState("");
   const [connected, setConnected] = useState(false);
 
   const [diceValue, setDiceValue] = useState(null);  
 const [legalMoves, setLegalMoves] = useState([]);
+const [selectedCoinId, setSelectedCoinId] = useState(null);
 const [reverseMode, setReverseMode] = useState(false);
 const [turnSeconds, setTurnSeconds] = useState(null);
 
@@ -32,9 +45,53 @@ const [turnSeconds, setTurnSeconds] = useState(null);
   useEffect(() => {
 
     const handleConnect = () => {
-      console.log("Connected:", socket.id);
-      setConnected(true);
-    };
+  console.log("Connected:", socket.id);
+  setConnected(true);
+
+  const savedUserId =
+    localStorage.getItem("reverseLudo_userId");
+
+  const savedRoomId =
+    localStorage.getItem("reverseLudo_roomId");
+
+  if (!savedUserId || !savedRoomId) {
+    return;
+  }
+
+  socket.emit(
+    "resume_room",
+    {
+      roomId: savedRoomId,
+      userId: savedUserId,
+    },
+    (result) => {
+      console.log("Resume room:", result);
+
+      if (!result.success) {
+        console.log(
+          "Could not resume room:",
+          result.reason
+        );
+
+        return;
+      }
+
+      setRoom(result.room);
+      setGame(result.game || result.room?.game);
+
+      setRoomIdInput(result.room.roomId);
+
+      // Restore the game screen.
+      if (result.room.game) {
+        setScreen("game");
+      }
+
+      setMessage(
+        "Game resumed successfully."
+      );
+    }
+  );
+};
 
     const handleDisconnect = () => {
       console.log("Disconnected");
@@ -67,6 +124,30 @@ const [turnSeconds, setTurnSeconds] = useState(null);
     socket.on("disconnect", handleDisconnect);
     socket.on("room_updated", handleRoomUpdated);
     socket.on("game_started", handleGameStarted);
+    socket.on("game_finished", (data) => {
+  console.log("Game finished:", data);
+
+  setGame(data.game);
+
+  setWinner(
+    data.winner ||
+      data.game?.players?.find(
+        (player) =>
+          player.userId === data.game?.winnerId
+      ) ||
+      null
+  );
+
+  setDiceValue(null);
+  setLegalMoves([]);
+  setSelectedCoinId(null);
+  setReverseMode(false);
+  setTurnSeconds(null);
+
+  setMessage(
+    `${data.winner?.name || "Player"} won the game!`
+  );
+});
 
     socket.on("dice_rolled", (data) => {
       console.log("Dice rolled:", data);
@@ -134,8 +215,52 @@ const [turnSeconds, setTurnSeconds] = useState(null);
 
     // Socket may already be connected
     if (socket.connected) {
-      setConnected(true);
-    }
+  setConnected(true);
+
+  const savedUserId =
+    localStorage.getItem("reverseLudo_userId");
+
+  const savedRoomId =
+    localStorage.getItem("reverseLudo_roomId");
+
+  if (savedUserId && savedRoomId) {
+    socket.emit(
+      "resume_room",
+      {
+        roomId: savedRoomId,
+        userId: savedUserId,
+      },
+      (result) => {
+        console.log(
+          "Resume room:",
+          result
+        );
+
+        if (!result.success) {
+          return;
+        }
+
+        setRoom(result.room);
+        setGame(
+          result.game ||
+          result.room?.game
+        );
+
+        setRoomIdInput(
+          result.room.roomId
+        );
+
+        if (result.room.game) {
+          setScreen("game");
+        }
+
+        setMessage(
+          "Game resumed successfully."
+        );
+      }
+    );
+  }
+}
 
 
     return () => {
@@ -147,6 +272,7 @@ const [turnSeconds, setTurnSeconds] = useState(null);
       socket.off("turn_changed");
       socket.off("turn_timer");
       socket.off("coin_moved");
+      socket.off("game_finished");
     };
 
   }, []);
@@ -166,6 +292,21 @@ const [turnSeconds, setTurnSeconds] = useState(null);
 
   setUserId(generatedUserId);
 
+  localStorage.setItem(
+  "reverseLudo_userId",
+  generatedUserId
+);
+
+localStorage.setItem(
+  "reverseLudo_name",
+  name.trim()
+);
+
+localStorage.setItem(
+  "reverseLudo_color",
+  color
+);
+
   socket.emit(
     "create_room",
     {
@@ -183,6 +324,10 @@ const [turnSeconds, setTurnSeconds] = useState(null);
 
       setRoom(result.room);
       setRoomIdInput(result.room.roomId);
+            localStorage.setItem(
+        "reverseLudo_roomId",
+        result.room.roomId
+      );
       setMessage("Room created successfully.");
     }
   );
@@ -207,6 +352,26 @@ const [turnSeconds, setTurnSeconds] = useState(null);
   const generatedUserId = `user-${crypto.randomUUID()}`;
 
   setUserId(generatedUserId);
+
+  localStorage.setItem(
+  "reverseLudo_userId",
+  generatedUserId
+);
+
+localStorage.setItem(
+  "reverseLudo_name",
+  name.trim()
+);
+
+localStorage.setItem(
+  "reverseLudo_color",
+  color
+);
+
+localStorage.setItem(
+  "reverseLudo_roomId",
+  roomIdInput.trim().toUpperCase()
+);
 
   socket.emit(
     "join_room",
@@ -271,7 +436,13 @@ const [turnSeconds, setTurnSeconds] = useState(null);
   // --------------------------------------------------------
 
   const handleRollDice = () => {
-    if (!room) return;
+  if (
+    !room ||
+    !game ||
+    game.status !== "playing"
+  ) {
+    return;
+  }
 
     socket.emit(
       "roll_dice",
@@ -392,6 +563,22 @@ const [turnSeconds, setTurnSeconds] = useState(null);
         setRoom(null);
         setGame(null);
 
+        localStorage.removeItem(
+  "reverseLudo_roomId"
+);
+
+localStorage.removeItem(
+  "reverseLudo_userId"
+);
+
+localStorage.removeItem(
+  "reverseLudo_name"
+);
+
+localStorage.removeItem(
+  "reverseLudo_color"
+);
+
         setMessage(
           "You left the room."
         );
@@ -460,7 +647,7 @@ const hasRolled =
   game?.currentTurn?.hasRolled === true;
 
 const backwardMoves =
-  legalMoves.filter(
+  (legalMoves || []).filter(
     (move) =>
       move.direction === "backward"
   );
@@ -1037,6 +1224,7 @@ const canUseReverse =
               <button
                 onClick={handleRollDice}
                 disabled={
+                  game.status !== "playing" ||
                   game.currentTurn.playerId !== userId ||
                   game.currentTurn.hasRolled
                 }
@@ -1095,6 +1283,129 @@ const canUseReverse =
 
           </div>
         )}
+
+        {game && game.status === "finished" && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-5 backdrop-blur-sm">
+    <div className="w-full max-w-md overflow-hidden rounded-[32px] border border-[#A4AE7A]/40 bg-[#38452A] shadow-[0_25px_80px_rgba(0,0,0,0.5)]">
+
+      {/* Winner Header */}
+      <div className="px-6 pb-5 pt-8 text-center">
+
+        <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-[#A4AE7A]/20 text-4xl">
+          🏆
+        </div>
+
+        <p className="mt-5 text-sm font-black tracking-[0.25em] text-[#A4AE7A]">
+          GAME COMPLETED
+        </p>
+
+        <h1 className="mt-2 text-4xl font-black text-white">
+          {winner?.name || "Winner"}
+        </h1>
+
+        <p className="mt-2 text-lg font-bold text-[#D8D8C6]">
+          WINS THE GAME!
+        </p>
+      </div>
+
+      {/* Players */}
+      <div className="space-y-3 px-6 pb-6">
+
+        {game.players.map((player, index) => {
+          const isWinner =
+            player.userId === game.winnerId;
+
+          const finishedCoins =
+            player.coins?.filter(
+              (coin) =>
+                coin.area === "finished"
+            ).length || 0;
+
+          return (
+            <div
+              key={player.userId}
+              className={`flex items-center justify-between rounded-2xl border px-4 py-3 ${
+                isWinner
+                  ? "border-[#A4AE7A] bg-[#A4AE7A]/15"
+                  : "border-[#7E8B52] bg-black/10"
+              }`}
+            >
+
+              <div className="flex items-center gap-3">
+
+                <div
+                  className={`flex h-11 w-11 items-center justify-center rounded-full ${
+                    isWinner
+                      ? "bg-[#A4AE7A]/25"
+                      : "bg-white/5"
+                  }`}
+                >
+                  {isWinner ? "🏆" : index + 1}
+                </div>
+
+                <div>
+                  <p className="font-black text-white">
+                    {player.name}
+                  </p>
+
+                  <p className="text-xs text-[#D8D8C6]/60">
+                    {isWinner
+                      ? "WINNER"
+                      : "DEFEATED"}
+                  </p>
+                </div>
+
+              </div>
+
+              <div className="text-right">
+                <p className="font-black text-[#D8D8C6]">
+                  {finishedCoins}/4
+                </p>
+
+                <p className="text-[10px] uppercase tracking-wider text-[#A4AE7A]/70">
+                  Finished
+                </p>
+              </div>
+
+            </div>
+          );
+        })}
+
+      </div>
+
+      {/* Actions */}
+      <div className="space-y-3 border-t border-[#7E8B52] px-6 py-5">
+
+        <button
+          onClick={() => {
+            window.location.reload();
+          }}
+          className="w-full rounded-2xl bg-[#A4AE7A] px-5 py-4 font-black text-[#38452A] transition hover:bg-[#D8D8C6]"
+        >
+          PLAY AGAIN
+        </button>
+
+        <button
+          onClick={() => {
+            setRoom(null);
+            setGame(null);
+            setWinner(null);
+            setScreen("home");
+
+            localStorage.removeItem(
+              "reverseLudo_roomId"
+            );
+          }}
+          className="w-full rounded-2xl border border-[#7E8B52] bg-transparent px-5 py-4 font-black text-[#D8D8C6]"
+        >
+          HOME
+        </button>
+
+      </div>
+
+    </div>
+  </div>
+)}
 
 
         {/* ------------------------------------------------ */}
@@ -1484,6 +1795,7 @@ const canUseReverse =
         {/* GAME STARTED */}
         {/* ------------------------------------------------ */}
 
+        {/*
         {game && (
 
           <div className="rounded-2xl bg-white p-6 shadow-sm">
@@ -1504,9 +1816,6 @@ const canUseReverse =
               </p>
 
             </div>
-
-
-            {/* Game Information */}
 
             <div className="mt-7 grid grid-cols-2 gap-3">
 
@@ -1565,8 +1874,6 @@ const canUseReverse =
             </div>
 
 
-            {/* Players */}
-
             <div className="mt-7">
 
               <h3 className="font-bold">
@@ -1622,6 +1929,8 @@ const canUseReverse =
           </div>
 
         )}
+        */}
+        
 
       </div>
 

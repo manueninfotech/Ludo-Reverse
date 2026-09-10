@@ -12,12 +12,9 @@
 // - Save to MongoDB
 // - Decide the winner
 //
-// Those responsibilities will be handled separately.
-//
 // ============================================================
 
 import { getBoardConfig } from "./boardConfig.js";
-
 
 // ============================================================
 // CONSTANTS
@@ -26,78 +23,209 @@ import { getBoardConfig } from "./boardConfig.js";
 const BASE_PROGRESS = -1;
 const FINISHED_AREA = "finished";
 
+// ============================================================
+// GET HOME ENTRY PROGRESS
+// ============================================================
+//
+// Converts the player's absolute home-entry cell into
+// the player's relative progress.
+//
+// Example - standard 4-player Green:
+//
+// start = 13
+// homeEntry = 11
+//
+// (11 - 13 + 52) % 52
+// = 50
+//
+// Therefore:
+//
+// progress 50 = absolute cell 11
+// progress 51 = first home cell
+//
+// ============================================================
+
+const getHomeEntryProgress = (
+  playerColor,
+  playerCount
+) => {
+  const board =
+    getBoardConfig(playerCount);
+
+  if (!board) {
+    return null;
+  }
+
+  const startCell =
+    board.startCells[playerColor];
+
+  const homeEntryCell =
+    board.homeEntryCells[playerColor];
+
+  if (
+    startCell === undefined ||
+    homeEntryCell === undefined
+  ) {
+    return null;
+  }
+
+  return (
+    homeEntryCell -
+    startCell +
+    board.trackSize
+  ) % board.trackSize;
+};
 
 // ============================================================
 // GET COIN ABSOLUTE CELL
 // ============================================================
 //
-// Converts a player's relative progress into the actual
-// shared-track cell.
+// Only coins on the shared main track have an absolute cell.
 //
-// Example:
+// Important:
+// A progress value beyond the player's home-entry progress
+// is already inside the private home path.
 //
-// Red starts at 0
-// progress 5 -> absolute cell 5
-//
-// Green starts at 13
-// progress 5 -> absolute cell 18
-//
-// Yellow starts at 26
-// progress 5 -> absolute cell 31
-//
-// Blue starts at 39
-// progress 5 -> absolute cell 44
-//
-// This only applies while the coin is on the main track.
 // ============================================================
 
-export const getAbsoluteCell = (playerColor, progress, playerCount) => {
-  const board = getBoardConfig(playerCount);
+export const getAbsoluteCell = (
+  playerColor,
+  progress,
+  playerCount
+) => {
+  const board =
+    getBoardConfig(playerCount);
 
   if (!board) {
     return null;
   }
 
-  // Coin is not on the shared main track
-  if (progress < 0 || progress >= board.trackSize) {
+  const homeEntryProgress =
+    getHomeEntryProgress(
+      playerColor,
+      playerCount
+    );
+
+  if (
+    homeEntryProgress === null
+  ) {
     return null;
   }
 
-  const startCell = board.startCells[playerColor];
-
-  if (startCell === undefined) {
+  // Outside shared track.
+  if (
+    progress < 0 ||
+    progress > homeEntryProgress
+  ) {
     return null;
   }
 
-  return (startCell + progress) % board.trackSize;
+  const startCell =
+    board.startCells[playerColor];
+
+  if (
+    startCell === undefined
+  ) {
+    return null;
+  }
+
+  return (
+    startCell + progress
+  ) % board.trackSize;
 };
-
 
 // ============================================================
 // GET MOVEMENT AREA
 // ============================================================
 //
-// Determines where the coin will be after a movement.
+// Main track:
+// 0 .. homeEntryProgress
 //
-// Returns:
-// - base
-// - main
-// - home
-// - finished
+// Home:
+// homeEntryProgress + 1 .. finishPosition - 1
+//
+// Finished:
+// finishPosition
+//
 // ============================================================
 
-export const getAreaFromProgress = (progress, playerCount) => {
-  const board = getBoardConfig(playerCount);
+export const getAreaFromProgress = (
+  progress,
+  playerCount,
+  playerColor = null
+) => {
+  const board =
+    getBoardConfig(playerCount);
 
   if (!board) {
     return null;
   }
 
-  if (progress === BASE_PROGRESS) {
+  if (
+    progress ===
+    BASE_PROGRESS
+  ) {
     return "base";
   }
 
-  if (progress >= 0 && progress < board.trackSize) {
+  // ----------------------------------------------------------
+  // Determine home-entry progress.
+  // ----------------------------------------------------------
+  //
+  // Normally playerColor is supplied.
+  // The fallback below preserves compatibility with older
+  // callers that only check area ranges.
+  //
+  // For actual movement, playerColor is always supplied.
+  // ----------------------------------------------------------
+
+  if (playerColor) {
+    const homeEntryProgress =
+      getHomeEntryProgress(
+        playerColor,
+        playerCount
+      );
+
+    if (
+      homeEntryProgress === null
+    ) {
+      return null;
+    }
+
+    if (
+      progress >= 0 &&
+      progress <= homeEntryProgress
+    ) {
+      return "main";
+    }
+
+    if (
+      progress >
+        homeEntryProgress &&
+      progress <
+        board.finishPosition
+    ) {
+      return "home";
+    }
+
+    if (
+      progress ===
+      board.finishPosition
+    ) {
+      return FINISHED_AREA;
+    }
+
+    return null;
+  }
+
+  // ----------------------------------------------------------
+  // Backward-compatible fallback.
+  // ----------------------------------------------------------
+
+  if (
+    progress >= 0 &&
+    progress < board.trackSize
+  ) {
     return "main";
   }
 
@@ -108,26 +236,92 @@ export const getAreaFromProgress = (progress, playerCount) => {
     return "home";
   }
 
-  if (progress === board.finishPosition) {
+  if (
+    progress ===
+    board.finishPosition
+  ) {
     return FINISHED_AREA;
   }
 
   return null;
 };
 
+// ============================================================
+// GET FORWARD TARGET PROGRESS
+// ============================================================
+//
+// This is the important Reverse Ludo home-entry logic.
+//
+// Example - Green:
+//
+// homeEntryProgress = 50
+//
+// current = 50
+// dice = 1
+//
+// target = 51
+// => first Green home cell
+//
+// current = 49
+// dice = 3
+//
+// target = 52
+// => second Green home cell
+//
+// ============================================================
+
+const getForwardTargetProgress = ({
+  playerColor,
+  playerCount,
+  currentProgress,
+  diceValue,
+}) => {
+  const board =
+    getBoardConfig(playerCount);
+
+  if (!board) {
+    return null;
+  }
+
+  const homeEntryProgress =
+    getHomeEntryProgress(
+      playerColor,
+      playerCount
+    );
+
+  if (
+    homeEntryProgress === null
+  ) {
+    return null;
+  }
+
+  const targetProgress =
+    currentProgress +
+    diceValue;
+
+  // Still on shared main track.
+  if (
+    targetProgress <=
+    homeEntryProgress
+  ) {
+    return {
+      progress: targetProgress,
+      entersHome: false,
+    };
+  }
+
+  // Passed the last shared-track cell.
+  //
+  // The remaining movement continues inside
+  // the player's private home path.
+  return {
+    progress: targetProgress,
+    entersHome: true,
+  };
+};
 
 // ============================================================
-// GET MOVEMENT RESULT
-// ============================================================
-//
-// Calculates where a coin will end up if moved.
-//
-// direction:
-// - "forward"
-// - "backward"
-//
-// Returns null if the movement is illegal.
-//
+// CALCULATE MOVEMENT
 // ============================================================
 
 export const calculateMovement = ({
@@ -137,254 +331,359 @@ export const calculateMovement = ({
   diceValue,
   direction,
 }) => {
-  const board = getBoardConfig(playerCount);
+  const board =
+    getBoardConfig(playerCount);
 
   if (!board) {
     return {
       legal: false,
-      reason: "Invalid player count.",
+      reason:
+        "Invalid player count.",
     };
   }
 
-  // ----------------------------------------------------------
-  // Validate player color
-  // ----------------------------------------------------------
-
-  if (!board.colors.includes(playerColor)) {
-    return {
-      legal: false,
-      reason: "Invalid player color.",
-    };
-  }
-
-
-  // ----------------------------------------------------------
-  // Validate dice
-  // ----------------------------------------------------------
+  // ==========================================================
+  // VALIDATE PLAYER COLOR
+  // ==========================================================
 
   if (
-    !Number.isInteger(diceValue) ||
+    !board.colors.includes(
+      playerColor
+    )
+  ) {
+    return {
+      legal: false,
+      reason:
+        "Invalid player color.",
+    };
+  }
+
+  // ==========================================================
+  // VALIDATE DICE
+  // ==========================================================
+
+  if (
+    !Number.isInteger(
+      diceValue
+    ) ||
     diceValue < 1 ||
     diceValue > 6
   ) {
     return {
       legal: false,
-      reason: "Dice value must be between 1 and 6.",
+      reason:
+        "Dice value must be between 1 and 6.",
     };
   }
 
+  // ==========================================================
+  // VALIDATE DIRECTION
+  // ==========================================================
 
-  // ----------------------------------------------------------
-  // Validate direction
-  // ----------------------------------------------------------
-
-  if (!["forward", "backward"].includes(direction)) {
+  if (
+    ![
+      "forward",
+      "backward",
+    ].includes(direction)
+  ) {
     return {
       legal: false,
-      reason: "Direction must be forward or backward.",
+      reason:
+        "Direction must be forward or backward.",
     };
   }
 
-
-  // ----------------------------------------------------------
-  // Validate coin
-  // ----------------------------------------------------------
+  // ==========================================================
+  // VALIDATE COIN
+  // ==========================================================
 
   if (!coin) {
     return {
       legal: false,
-      reason: "Coin is required.",
+      reason:
+        "Coin is required.",
     };
   }
-
 
   // ==========================================================
   // COIN IN BASE
   // ==========================================================
 
-  if (coin.area === "base") {
-    // A coin can only leave base when dice is 6.
-    if (diceValue !== 6) {
+  if (
+    coin.area === "base"
+  ) {
+    if (
+      diceValue !== 6
+    ) {
       return {
         legal: false,
-        reason: "A coin can leave base only when the dice is 6.",
+        reason:
+          "A coin can leave base only when the dice is 6.",
       };
     }
 
-    // A coin leaving base always moves forward.
-    if (direction !== "forward") {
+    if (
+      direction !== "forward"
+    ) {
       return {
         legal: false,
-        reason: "A coin in base cannot move backward.",
+        reason:
+          "A coin in base cannot move backward.",
       };
     }
 
-    const startCell = board.startCells[playerColor];
+    const startCell =
+      board.startCells[playerColor];
 
     return {
       legal: true,
+
       direction: "forward",
+
       fromArea: "base",
       toArea: "main",
-      fromProgress: BASE_PROGRESS,
+
+      fromProgress:
+        BASE_PROGRESS,
+
       toProgress: 0,
+
       fromAbsoluteCell: null,
-      toAbsoluteCell: startCell,
+      toAbsoluteCell:
+        startCell,
+
       enteredBoard: true,
       enteredHome: false,
       finished: false,
     };
   }
 
-
   // ==========================================================
-  // COIN ALREADY FINISHED
+  // FINISHED COIN
   // ==========================================================
 
-  if (coin.area === FINISHED_AREA) {
+  if (
+    coin.area ===
+    FINISHED_AREA
+  ) {
     return {
       legal: false,
-      reason: "A finished coin cannot move.",
+      reason:
+        "A finished coin cannot move.",
     };
   }
 
-
   // ==========================================================
-  // VALIDATE CURRENT PROGRESS
+  // VALIDATE PROGRESS
   // ==========================================================
 
-  if (!Number.isInteger(coin.progress)) {
+  if (
+    !Number.isInteger(
+      coin.progress
+    )
+  ) {
     return {
       legal: false,
-      reason: "Coin progress is invalid.",
+      reason:
+        "Coin progress is invalid.",
     };
   }
 
-
   // ==========================================================
-  // COIN IN HOME PATH
+  // COIN IN HOME
   // ==========================================================
 
-  if (coin.area === "home") {
-    // Reverse movement is NOT allowed inside home path.
-    if (direction !== "forward") {
+  if (
+    coin.area === "home"
+  ) {
+    if (
+      direction !== "forward"
+    ) {
       return {
         legal: false,
-        reason: "Backward movement is not allowed in the home path.",
+        reason:
+          "Backward movement is not allowed in the home path.",
       };
     }
 
-    const newProgress = coin.progress + diceValue;
+    const newProgress =
+      coin.progress +
+      diceValue;
 
-    // Cannot move beyond the finish position.
-    if (newProgress > board.finishPosition) {
+    if (
+      newProgress >
+      board.finishPosition
+    ) {
       return {
         legal: false,
-        reason: "Exact dice value is required to finish the coin.",
+        reason:
+          "Exact dice value is required to finish the coin.",
       };
     }
 
     const newArea =
-      newProgress === board.finishPosition
+      newProgress ===
+      board.finishPosition
         ? FINISHED_AREA
         : "home";
 
     return {
       legal: true,
+
       direction: "forward",
+
       fromArea: "home",
       toArea: newArea,
-      fromProgress: coin.progress,
-      toProgress: newProgress,
+
+      fromProgress:
+        coin.progress,
+
+      toProgress:
+        newProgress,
+
       fromAbsoluteCell: null,
       toAbsoluteCell: null,
+
       enteredBoard: false,
       enteredHome: false,
-      finished: newArea === FINISHED_AREA,
+
+      finished:
+        newArea ===
+        FINISHED_AREA,
     };
   }
-
 
   // ==========================================================
   // COIN ON MAIN TRACK
   // ==========================================================
 
-  if (coin.area === "main") {
-
-    // --------------------------------------------------------
-    // FORWARD MOVEMENT
-    // --------------------------------------------------------
-
-    if (direction === "forward") {
-      const newProgress = coin.progress + diceValue;
-
-      // Cannot go beyond finish.
-      if (newProgress > board.finishPosition) {
-        return {
-          legal: false,
-          reason: "Exact dice value is required to finish the coin.",
-        };
-      }
-
-      const newArea = getAreaFromProgress(
-        newProgress,
-        playerCount
-      );
-
-      const fromAbsoluteCell = getAbsoluteCell(
+  if (
+    coin.area === "main"
+  ) {
+    const homeEntryProgress =
+      getHomeEntryProgress(
         playerColor,
-        coin.progress,
         playerCount
       );
 
-      const toAbsoluteCell = getAbsoluteCell(
-        playerColor,
-        newProgress,
-        playerCount
-      );
-
+    if (
+      homeEntryProgress === null
+    ) {
       return {
-        legal: true,
-        direction: "forward",
-        fromArea: "main",
-        toArea: newArea,
-        fromProgress: coin.progress,
-        toProgress: newProgress,
-        fromAbsoluteCell,
-        toAbsoluteCell,
-        enteredBoard: false,
-        enteredHome: newArea === "home",
-        finished: newArea === FINISHED_AREA,
+        legal: false,
+        reason:
+          "Unable to determine home entry.",
       };
     }
 
+    // ========================================================
+    // FORWARD
+    // ========================================================
 
-    // --------------------------------------------------------
-    // BACKWARD MOVEMENT
-    // --------------------------------------------------------
+    if (
+      direction === "forward"
+    ) {
+      const movement =
+        getForwardTargetProgress({
+          playerColor,
+          playerCount,
+          currentProgress:
+            coin.progress,
+          diceValue,
+        });
 
-    if (direction === "backward") {
-      const newProgress = coin.progress - diceValue;
+      if (!movement) {
+        return {
+          legal: false,
+          reason:
+            "Unable to calculate forward movement.",
+        };
+      }
 
-      // ======================================================
-      // IMPORTANT REVERSE LUDO RULE
-      // ======================================================
-      //
-      // Progress 0 is the player's own starting cell.
-      //
-      // Therefore:
-      //
-      // 0 - anything < 0 -> INVALID
-      //
-      // 3 - 3 = 0 -> VALID
-      //
-      // 3 - 5 = -2 -> INVALID
-      //
-      // This prevents the coin from moving backward past
-      // its OWN starting cell.
-      // ======================================================
+      const newProgress =
+        movement.progress;
 
-      if (newProgress < 0) {
+      if (
+        newProgress >
+        board.finishPosition
+      ) {
+        return {
+          legal: false,
+          reason:
+            "Exact dice value is required to finish the coin.",
+        };
+      }
+
+      const newArea =
+        newProgress <=
+        homeEntryProgress
+          ? "main"
+          : newProgress ===
+            board.finishPosition
+          ? FINISHED_AREA
+          : "home";
+
+      const fromAbsoluteCell =
+        getAbsoluteCell(
+          playerColor,
+          coin.progress,
+          playerCount
+        );
+
+      const toAbsoluteCell =
+        newArea === "main"
+          ? getAbsoluteCell(
+              playerColor,
+              newProgress,
+              playerCount
+            )
+          : null;
+
+      return {
+        legal: true,
+
+        direction: "forward",
+
+        fromArea: "main",
+        toArea: newArea,
+
+        fromProgress:
+          coin.progress,
+
+        toProgress:
+          newProgress,
+
+        fromAbsoluteCell,
+        toAbsoluteCell,
+
+        enteredBoard: false,
+
+        enteredHome:
+          newArea === "home" ||
+          newArea ===
+            FINISHED_AREA,
+
+        finished:
+          newArea ===
+          FINISHED_AREA,
+      };
+    }
+
+    // ========================================================
+    // BACKWARD
+    // ========================================================
+
+    if (
+      direction === "backward"
+    ) {
+      const newProgress =
+        coin.progress -
+        diceValue;
+
+      // Cannot go below own starting position.
+      if (
+        newProgress < 0
+      ) {
         return {
           legal: false,
           reason:
@@ -392,27 +691,37 @@ export const calculateMovement = ({
         };
       }
 
-      const fromAbsoluteCell = getAbsoluteCell(
-        playerColor,
-        coin.progress,
-        playerCount
-      );
+      const fromAbsoluteCell =
+        getAbsoluteCell(
+          playerColor,
+          coin.progress,
+          playerCount
+        );
 
-      const toAbsoluteCell = getAbsoluteCell(
-        playerColor,
-        newProgress,
-        playerCount
-      );
+      const toAbsoluteCell =
+        getAbsoluteCell(
+          playerColor,
+          newProgress,
+          playerCount
+        );
 
       return {
         legal: true,
+
         direction: "backward",
+
         fromArea: "main",
         toArea: "main",
-        fromProgress: coin.progress,
-        toProgress: newProgress,
+
+        fromProgress:
+          coin.progress,
+
+        toProgress:
+          newProgress,
+
         fromAbsoluteCell,
         toAbsoluteCell,
+
         enteredBoard: false,
         enteredHome: false,
         finished: false,
@@ -420,42 +729,19 @@ export const calculateMovement = ({
     }
   }
 
-
   // ==========================================================
   // INVALID AREA
   // ==========================================================
 
   return {
     legal: false,
-    reason: "Invalid coin area.",
+    reason:
+      "Invalid coin area.",
   };
 };
 
-
 // ============================================================
 // GET LEGAL DIRECTIONS
-// ============================================================
-//
-// This function tells the frontend/backend which directions
-// are currently possible for a particular coin.
-//
-// Example:
-//
-// [
-//   "forward",
-//   "backward"
-// ]
-//
-// or:
-//
-// [
-//   "forward"
-// ]
-//
-// or:
-//
-// []
-//
 // ============================================================
 
 export const getLegalDirections = ({
@@ -466,36 +752,47 @@ export const getLegalDirections = ({
 }) => {
   const directions = [];
 
-  const forwardMove = calculateMovement({
-    playerColor,
-    playerCount,
-    coin,
-    diceValue,
-    direction: "forward",
-  });
+  const forwardMove =
+    calculateMovement({
+      playerColor,
+      playerCount,
+      coin,
+      diceValue,
+      direction:
+        "forward",
+    });
 
-  if (forwardMove.legal) {
-    directions.push("forward");
+  if (
+    forwardMove.legal
+  ) {
+    directions.push(
+      "forward"
+    );
   }
 
-  const backwardMove = calculateMovement({
-    playerColor,
-    playerCount,
-    coin,
-    diceValue,
-    direction: "backward",
-  });
+  const backwardMove =
+    calculateMovement({
+      playerColor,
+      playerCount,
+      coin,
+      diceValue,
+      direction:
+        "backward",
+    });
 
-  if (backwardMove.legal) {
-    directions.push("backward");
+  if (
+    backwardMove.legal
+  ) {
+    directions.push(
+      "backward"
+    );
   }
 
   return directions;
 };
 
-
 // ============================================================
-// CHECK WHETHER A COIN CAN MOVE
+// CAN COIN MOVE
 // ============================================================
 
 export const canCoinMove = ({
@@ -504,38 +801,21 @@ export const canCoinMove = ({
   coin,
   diceValue,
 }) => {
-  const directions = getLegalDirections({
-    playerColor,
-    playerCount,
-    coin,
-    diceValue,
-  });
+  const directions =
+    getLegalDirections({
+      playerColor,
+      playerCount,
+      coin,
+      diceValue,
+    });
 
-  return directions.length > 0;
+  return (
+    directions.length > 0
+  );
 };
 
 // ============================================================
-// GET COMPLETE POSSIBLE MOVES FOR ALL COINS
-// ============================================================
-//
-// Returns every legal movement available for the player's
-// coins for the current dice value.
-//
-// Example:
-//
-// [
-//   {
-//     coinId: "user-1-coin-1",
-//     direction: "forward",
-//     ...
-//   },
-//   {
-//     coinId: "user-1-coin-2",
-//     direction: "forward",
-//     ...
-//   }
-// ]
-//
+// GET POSSIBLE MOVES
 // ============================================================
 
 export const getPossibleMoves = ({
@@ -547,39 +827,51 @@ export const getPossibleMoves = ({
 }) => {
   const moves = [];
 
-  if (!Array.isArray(coins)) {
+  if (
+    !Array.isArray(coins)
+  ) {
     return moves;
   }
 
-  for (const coin of coins) {
-    const directions = getLegalDirections({
-      playerColor,
-      playerCount,
-      coin,
-      diceValue,
-    });
+  for (
+    const coin of coins
+  ) {
+    const directions =
+      getLegalDirections({
+        playerColor,
+        playerCount,
+        coin,
+        diceValue,
+      });
 
-    for (const direction of directions) {
-      // Extra turns from 6 or kill do not allow backward movement.
+    for (
+      const direction of directions
+    ) {
+
       if (
-        direction === "backward" &&
+        direction ===
+          "backward" &&
         backwardAllowed !== true
       ) {
         continue;
       }
 
-      const movement = calculateMovement({
-        playerColor,
-        playerCount,
-        coin,
-        diceValue,
-        direction,
-      });
+      const movement =
+        calculateMovement({
+          playerColor,
+          playerCount,
+          coin,
+          diceValue,
+          direction,
+        });
 
-      if (movement.legal) {
+      if (
+        movement.legal
+      ) {
         moves.push({
           ...movement,
-          coinId: coin.coinId,
+          coinId:
+            coin.coinId,
         });
       }
     }

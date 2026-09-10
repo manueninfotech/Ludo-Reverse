@@ -2,72 +2,111 @@ import React from "react";
 
 const BOARD_SIZE = 15;
 
+// ============================================================
+// MAIN TRACK
+// ============================================================
+// 52 shared cells for the standard 4-color board.
+//
+// The logical numbering must remain:
+//
+// Red    start = 0
+// Green  start = 13
+// Yellow start = 26
+// Blue   start = 39
+//
+// These coordinates are the visual board coordinates.
+// ============================================================
+
 const PATH_COORDINATES = [
-  [6, 1],
-  [6, 2],
-  [6, 3],
-  [6, 4],
-  [6, 5],
+  // ----------------------------------------------------------
+  // LEFT -> TOP
+  // ----------------------------------------------------------
 
-  [5, 6],
-  [4, 6],
-  [3, 6],
-  [2, 6],
-  [1, 6],
-  [0, 6],
+  [6, 1],  // 0
+  [6, 2],  // 1
+  [6, 3],  // 2
+  [6, 4],  // 3
+  [6, 5],  // 4
 
-  [0, 7],
-  [0, 8],
+  [5, 6],  // 5
+  [4, 6],  // 6
+  [3, 6],  // 7
+  [2, 6],  // 8
+  [1, 6],  // 9
+  [0, 6],  // 10
 
-  [1, 8],
-  [2, 8],
-  [3, 8],
-  [4, 8],
-  [5, 8],
+  [0, 7],  // 11
+  [0, 8],  // 12
 
-  [6, 9],
-  [6, 10],
-  [6, 11],
-  [6, 12],
-  [6, 13],
-  [6, 14],
+  // ----------------------------------------------------------
+  // TOP -> RIGHT
+  // ----------------------------------------------------------
 
-  [7, 14],
+  [1, 8],  // 13
+  [2, 8],  // 14
+  [3, 8],  // 15
+  [4, 8],  // 16
+  [5, 8],  // 17
 
-  [8, 14],
-  [8, 13],
-  [8, 12],
-  [8, 11],
-  [8, 10],
-  [8, 9],
+  [6, 9],  // 18
+  [6, 10], // 19
+  [6, 11], // 20
+  [6, 12], // 21
+  [6, 13], // 22
+  [6, 14], // 23
 
-  [9, 8],
-  [10, 8],
-  [11, 8],
-  [12, 8],
-  [13, 8],
-  [14, 8],
+  // ----------------------------------------------------------
+  // RIGHT -> BOTTOM
+  // ----------------------------------------------------------
 
-  [14, 7],
-  [14, 6],
+  [7, 14], // 24
 
-  [13, 6],
-  [12, 6],
-  [11, 6],
-  [10, 6],
-  [9, 6],
+  [8, 14], // 25
+  [8, 13], // 26
+  [8, 12], // 27
+  [8, 11], // 28
+  [8, 10], // 29
+  [8, 9],  // 30
 
-  [8, 5],
-  [8, 4],
-  [8, 3],
-  [8, 2],
-  [8, 1],
-  [8, 0],
+  [9, 8],  // 31
+  [10, 8], // 32
+  [11, 8], // 33
+  [12, 8], // 34
+  [13, 8], // 35
+  [14, 8], // 36
 
-  [7, 0],
+  // ----------------------------------------------------------
+  // BOTTOM -> LEFT
+  // ----------------------------------------------------------
 
-  [6, 0],
+  [14, 7], // 37
+  [14, 6], // 38
+
+  [13, 6], // 39
+  [12, 6], // 40
+  [11, 6], // 41
+  [10, 6], // 42
+  [9, 6],  // 43
+
+  [8, 5],  // 44
+  [8, 4],  // 45
+  [8, 3],  // 46
+  [8, 2],  // 47
+  [8, 1],  // 48
+  [8, 0],  // 49
+
+  [7, 0],  // 50
+
+  // ----------------------------------------------------------
+  // LEFT SIDE -> CLOSE TRACK
+  // ----------------------------------------------------------
+
+  [6, 0],  // 51
 ];
+
+// ============================================================
+// PLAYER COLORS
+// ============================================================
 
 const COLOR_STYLES = {
   red: {
@@ -125,6 +164,10 @@ const COLOR_STYLES = {
   },
 };
 
+// ============================================================
+// BOARD COLORS
+// ============================================================
+
 const BOARD_COLORS = {
   background: "#38452A",
   panel: "#5F6F3A",
@@ -136,10 +179,18 @@ const BOARD_COLORS = {
 const getColorStyle = (color) =>
   COLOR_STYLES[color] || COLOR_STYLES.purple;
 
+// ============================================================
+// GET COINS ON MAIN TRACK CELL
+// ============================================================
+
 const getCoinsForCell = (game, absoluteCell) => {
   const result = [];
 
   for (const player of game.players || []) {
+    if (player.isConnected === false) {
+      continue;
+    }
+
     for (const coin of player.coins || []) {
       if (
         coin.area === "main" &&
@@ -156,11 +207,20 @@ const getCoinsForCell = (game, absoluteCell) => {
   return result;
 };
 
-const getFinishedCoins = (player) => {
-  return (player?.coins || []).filter(
-    (coin) => coin.area === "finished"
-  );
-};
+// ============================================================
+// HOME PATHS
+// ============================================================
+//
+// Progress values:
+//
+// 52 -> first home cell
+// 53 -> second home cell
+// 54 -> third home cell
+// 55 -> fourth home cell
+// 56 -> fifth home cell
+// 57 -> finished
+//
+// ============================================================
 
 const HOME_PATHS = {
   red: [
@@ -180,30 +240,38 @@ const HOME_PATHS = {
   ],
 
   yellow: [
-    [7, 9],
-    [7, 10],
-    [7, 11],
-    [7, 12],
-    [7, 13],
-  ],
+  [13, 7],
+  [12, 7],
+  [11, 7],
+  [10, 7],
+  [9, 7],
+],
 
-  blue: [
-    [9, 7],
-    [10, 7],
-    [11, 7],
-    [12, 7],
-    [13, 7],
-  ],
+blue: [
+  [7, 13],
+  [7, 12],
+  [7, 11],
+  [7, 10],
+  [7, 9],
+],
 };
 
-const getHomeCoordinate = (playerColor, progress) => {
-  const path = HOME_PATHS[playerColor];
+// ============================================================
+// GET HOME CELL COORDINATE
+// ============================================================
+
+const getHomeCoordinate = (
+  playerColor,
+  progress
+) => {
+  const path =
+    HOME_PATHS[playerColor];
 
   if (!path) {
     return null;
   }
 
-  const homeIndex = progress - 52;
+  const homeIndex = progress - 51;
 
   if (
     homeIndex < 0 ||
@@ -214,6 +282,10 @@ const getHomeCoordinate = (playerColor, progress) => {
 
   return path[homeIndex];
 };
+
+// ============================================================
+// PLAYER BASE POSITIONS
+// ============================================================
 
 const BASE_CONFIG = {
   red: {
@@ -237,142 +309,214 @@ const BASE_CONFIG = {
   },
 };
 
+// ============================================================
+// BASE AREA
+// ============================================================
+
 const BaseArea = ({
   player,
   onCoinClick,
   clickableCoinIds,
 }) => {
-  if (!player) return null;
+  if (!player || player.isConnected === false) {
+    return null;
+  }
 
-  const config = BASE_CONFIG[player.color];
+  const config =
+    BASE_CONFIG[player.color];
 
-  if (!config) return null;
+  if (!config) {
+    return null;
+  }
 
-  const style = getColorStyle(player.color);
+  const style =
+    getColorStyle(player.color);
 
   return (
     <div
       className="absolute z-20 flex items-center justify-center rounded-2xl p-2"
       style={{
-        top: `${(config.row / BOARD_SIZE) * 100}%`,
-        left: `${(config.col / BOARD_SIZE) * 100}%`,
-        width: `${(6 / BOARD_SIZE) * 100}%`,
-        height: `${(6 / BOARD_SIZE) * 100}%`,
-        backgroundColor: style.soft,
-        border: `2px solid ${style.border}`,
+        top:
+          `${(config.row / BOARD_SIZE) * 100}%`,
+        left:
+          `${(config.col / BOARD_SIZE) * 100}%`,
+        width:
+          `${(6 / BOARD_SIZE) * 100}%`,
+        height:
+          `${(6 / BOARD_SIZE) * 100}%`,
+        backgroundColor:
+          style.soft,
+        border:
+          `2px solid ${style.border}`,
       }}
     >
       <div
         className="flex h-full w-full items-center justify-center rounded-xl"
         style={{
-          backgroundColor: "rgba(216,216,198,0.08)",
-          border: `1px solid ${style.border}`,
+          backgroundColor:
+            "rgba(216,216,198,0.08)",
+          border:
+            `1px solid ${style.border}`,
         }}
       >
         <div className="grid grid-cols-2 gap-2">
-          {player.coins.slice(0, 4).map((coin) => {
-            const isBase =
-              coin.area === "base";
+          {player.coins
+            .slice(0, 4)
+            .map((coin) => {
 
-            const isClickable =
-              clickableCoinIds.has(coin.coinId);
+              const isBase =
+                coin.area === "base";
 
-            if (!isBase) {
+              const isFinished =
+                coin.area === "finished";
+
+              const isClickable =
+                clickableCoinIds.has(
+                  coin.coinId
+                );
+
+              // ------------------------------------------------
+              // FINISHED COIN
+              // ------------------------------------------------
+
+              if (isFinished) {
+                return (
+                  <div
+                    key={coin.coinId}
+                    className="flex aspect-square w-7 items-center justify-center rounded-full border-2 text-xs font-black sm:w-9"
+                    style={{
+                      backgroundColor:
+                        style.dark,
+                      borderColor:
+                        style.light,
+                      color: "#FFFFFF",
+                      boxShadow:
+                        `0 0 10px ${style.soft}`,
+                    }}
+                    title="Finished"
+                  >
+                    ✓
+                  </div>
+                );
+              }
+
+              // ------------------------------------------------
+              // COIN IS OUTSIDE BASE
+              // ------------------------------------------------
+
+              if (!isBase) {
+                return (
+                  <div
+                    key={coin.coinId}
+                    className="flex aspect-square w-7 items-center justify-center rounded-full border text-xs font-black opacity-30 sm:w-9"
+                    style={{
+                      backgroundColor:
+                        "rgba(216,216,198,0.08)",
+                      borderColor:
+                        "rgba(216,216,198,0.2)",
+                      color:
+                        "rgba(216,216,198,0.25)",
+                    }}
+                  >
+                    ●
+                  </div>
+                );
+              }
+
+              // ------------------------------------------------
+              // BASE COIN
+              // ------------------------------------------------
+
               return (
-                <div
+                <button
                   key={coin.coinId}
-                  className="flex aspect-square w-7 items-center justify-center rounded-full border text-xs font-black opacity-30 sm:w-9"
+                  type="button"
+                  disabled={!isClickable}
+                  onClick={() =>
+                    isClickable &&
+                    onCoinClick(
+                      coin.coinId
+                    )
+                  }
+                  className={`flex aspect-square w-7 items-center justify-center rounded-full border text-xs font-black transition-all sm:w-9 ${
+                    isClickable
+                      ? "cursor-pointer scale-110"
+                      : ""
+                  }`}
                   style={{
                     backgroundColor:
-                      "rgba(216,216,198,0.08)",
+                      style.main,
                     borderColor:
-                      "rgba(216,216,198,0.2)",
-                    color:
-                      "rgba(216,216,198,0.25)",
+                      style.light,
+                    color: "#FFFFFF",
+                    boxShadow:
+                      isClickable
+                        ? `0 0 16px ${style.light}, 0 4px 12px ${style.soft}`
+                        : `0 4px 12px ${style.soft}`,
                   }}
                 >
                   ●
-                </div>
+                </button>
               );
-            }
-
-            return (
-              <button
-                key={coin.coinId}
-                type="button"
-                disabled={!isClickable}
-                onClick={() =>
-                  isClickable &&
-                  onCoinClick(coin.coinId)
-                }
-                className={`flex aspect-square w-7 items-center justify-center rounded-full border text-xs font-black transition-all sm:w-9 ${
-                  isClickable
-                    ? "cursor-pointer scale-110"
-                    : ""
-                }`}
-                style={{
-                  backgroundColor: style.main,
-                  borderColor: style.light,
-                  color: "#FFFFFF",
-                  boxShadow: isClickable
-                    ? `0 0 16px ${style.light}, 0 4px 12px ${style.soft}`
-                    : `0 4px 12px ${style.soft}`,
-                }}
-              >
-                ●
-              </button>
-            );
-          })}
+            })}
         </div>
       </div>
     </div>
   );
 };
 
+// ============================================================
+// PLAYER PANEL
+// ============================================================
+
 const PlayerPanel = ({
   player,
   isCurrent,
 }) => {
-  const style = getColorStyle(player.color);
+  const style =
+    getColorStyle(player.color);
 
   const finishedCoins =
     player.coins?.filter(
-      (coin) => coin.area === "finished"
+      (coin) =>
+        coin.area === "finished"
     ).length || 0;
 
   return (
     <div
       className="rounded-xl border px-3 py-2 transition-all"
       style={{
-        borderColor: isCurrent
-          ? style.border
-          : BOARD_COLORS.border,
-        backgroundColor: isCurrent
-          ? style.soft
-          : "rgba(95,138,69,0.35)",
+        borderColor:
+          isCurrent
+            ? style.border
+            : BOARD_COLORS.border,
+        backgroundColor:
+          isCurrent
+            ? style.soft
+            : "rgba(95,138,69,0.35)",
       }}
     >
       <div className="flex items-center justify-between gap-2">
 
         <div className="flex min-w-0 items-center gap-2">
-
           <span
             className="h-3 w-3 shrink-0 rounded-full"
             style={{
-              backgroundColor: style.main,
+              backgroundColor:
+                style.main,
             }}
           />
 
           <span className="truncate text-xs font-bold text-[#D8D8C6]">
             {player.name}
           </span>
-
         </div>
 
         <span
           className="text-xs font-black"
           style={{
-            color: style.text,
+            color:
+              style.text,
           }}
         >
           {finishedCoins}/4
@@ -384,16 +528,20 @@ const PlayerPanel = ({
         <div
           className="mt-1 text-[10px] font-black uppercase tracking-wider"
           style={{
-            color: style.light,
+            color:
+              style.light,
           }}
         >
           YOUR TURN
         </div>
       )}
-
     </div>
   );
 };
+
+// ============================================================
+// LUDO BOARD
+// ============================================================
 
 function LudoBoard({
   game,
@@ -402,77 +550,93 @@ function LudoBoard({
   reverseMode,
   onCoinClick,
 }) {
-  if (!game) return null;
+  if (!game) {
+    return null;
+  }
 
-  const players = game.players || [];
+  const players =
+    game.players || [];
 
-  console.log(
-  "PLAYER COINS:",
-  players.map((player) => ({
-    name: player.name,
-    color: player.color,
-    coins: player.coins,
-  }))
-);
+  // ==========================================================
+  // CURRENT PLAYER
+  // ==========================================================
 
-  /*
-    Only the current player's coins can be clicked.
-  */
   const currentPlayer =
     players.find(
       (player) =>
         player.userId === userId
     );
 
-  /*
-    Direction depends on the Reverse button.
-  */
-  const selectedDirection = reverseMode
-    ? "backward"
-    : "forward";
+  // ==========================================================
+  // MOVEMENT DIRECTION
+  // ==========================================================
+  //
+  // Normal:
+  //     touching coin = forward
+  //
+  // Reverse mode:
+  //     touching coin = backward
+  //
+  // The actual validation remains server-side.
+  // ==========================================================
 
-  /*
-    Only highlight coins which are legal
-    for the currently selected direction.
-  */
-  const clickableCoinIds = new Set(
-    (legalMoves || [])
-      .filter(
-        (move) =>
-          move.direction ===
-          selectedDirection
-      )
-      .map(
-        (move) => move.coinId
-      )
-  );
+  const selectedDirection =
+    reverseMode
+      ? "backward"
+      : "forward";
+
+  // ==========================================================
+  // CLICKABLE COINS
+  // ==========================================================
+
+  const clickableCoinIds =
+    new Set(
+      (legalMoves || [])
+        .filter(
+          (move) =>
+            move.direction ===
+            selectedDirection
+        )
+        .map(
+          (move) =>
+            move.coinId
+        )
+    );
+
+  // ==========================================================
+  // ACTIVE PLAYERS
+  // ==========================================================
 
   const redPlayer =
     players.find(
-      (player) => player.color === "red"
+      (player) =>
+        player.color === "red"
     );
 
   const greenPlayer =
     players.find(
-      (player) => player.color === "green"
+      (player) =>
+        player.color === "green"
     );
 
   const yellowPlayer =
     players.find(
-      (player) => player.color === "yellow"
+      (player) =>
+        player.color === "yellow"
     );
 
   const bluePlayer =
     players.find(
-      (player) => player.color === "blue"
+      (player) =>
+        player.color === "blue"
     );
 
   return (
     <div className="w-full">
 
-      {/* ========================================= */}
+      {/* ================================================== */}
       {/* BOARD */}
-      {/* ========================================= */}
+      {/* ================================================== */}
 
       <div
         className="relative mx-auto aspect-square w-full max-w-[620px] overflow-hidden rounded-[24px] border-2 p-1.5 shadow-[0_15px_40px_rgba(20,30,10,0.35)] sm:p-2"
@@ -484,9 +648,9 @@ function LudoBoard({
         }}
       >
 
-        {/* ======================================= */}
+        {/* ================================================= */}
         {/* BOARD GRID */}
-        {/* ======================================= */}
+        {/* ================================================= */}
 
         <div
           className="absolute inset-0 grid"
@@ -502,175 +666,300 @@ function LudoBoard({
 
           {Array.from({
             length:
-              BOARD_SIZE * BOARD_SIZE,
-          }).map((_, index) => {
+              BOARD_SIZE *
+              BOARD_SIZE,
+          }).map(
+            (_, index) => {
 
-            const row =
-              Math.floor(
-                index / BOARD_SIZE
-              );
-
-            const col =
-              index % BOARD_SIZE;
-
-            const cellNumber =
-              PATH_COORDINATES.findIndex(
-                ([cellRow, cellCol]) =>
-                  cellRow === row &&
-                  cellCol === col
-              );
-
-            const isTrack =
-              cellNumber !== -1;
-
-            const isRedHome =
-              HOME_PATHS.red.some(
-                ([r, c]) =>
-                  r === row &&
-                  c === col
-              );
-
-            const isGreenHome =
-              HOME_PATHS.green.some(
-                ([r, c]) =>
-                  r === row &&
-                  c === col
-              );
-
-            const isYellowHome =
-              HOME_PATHS.yellow.some(
-                ([r, c]) =>
-                  r === row &&
-                  c === col
-              );
-
-            const isBlueHome =
-              HOME_PATHS.blue.some(
-                ([r, c]) =>
-                  r === row &&
-                  c === col
-              );
-
-            let backgroundColor =
-              "rgba(56,69,42,0.55)";
-
-            let borderColor =
-              "rgba(216,216,198,0.08)";
-
-            if (isTrack) {
-              backgroundColor =
-                BOARD_COLORS.cream;
-
-              borderColor =
-                "rgba(56,69,42,0.18)";
-            }
-
-            if (isRedHome) {
-              backgroundColor =
-                "rgba(201,74,74,0.55)";
-            }
-
-            if (isGreenHome) {
-              backgroundColor =
-                "rgba(95,138,69,0.65)";
-            }
-
-            if (isYellowHome) {
-              backgroundColor =
-                "rgba(212,173,69,0.65)";
-            }
-
-            if (isBlueHome) {
-              backgroundColor =
-                "rgba(77,120,168,0.65)";
-            }
-
-            const coins = isTrack
-              ? getCoinsForCell(
-                  game,
-                  cellNumber
-                )
-              : [];
-
-            const homeCoins = [];
-
-            for (const player of players) {
-              for (const coin of player.coins || []) {
-
-                if (coin.area !== "home") {
-                  continue;
-                }
-
-                const coordinate = getHomeCoordinate(
-                  player.color,
-                  coin.progress
+              const row =
+                Math.floor(
+                  index /
+                    BOARD_SIZE
                 );
 
-                if (!coordinate) {
+              const col =
+                index %
+                BOARD_SIZE;
+
+              // ---------------------------------------------
+              // MAIN TRACK CELL NUMBER
+              // ---------------------------------------------
+
+              const cellNumber =
+                PATH_COORDINATES.findIndex(
+                  ([cellRow, cellCol]) =>
+                    cellRow === row &&
+                    cellCol === col
+                );
+
+              const isTrack =
+                cellNumber !== -1;
+
+              // ---------------------------------------------
+              // HOME PATHS
+              // ---------------------------------------------
+
+              const isRedHome =
+                HOME_PATHS.red.some(
+                  ([r, c]) =>
+                    r === row &&
+                    c === col
+                );
+
+              const isGreenHome =
+                HOME_PATHS.green.some(
+                  ([r, c]) =>
+                    r === row &&
+                    c === col
+                );
+
+              const isYellowHome =
+                HOME_PATHS.yellow.some(
+                  ([r, c]) =>
+                    r === row &&
+                    c === col
+                );
+
+              const isBlueHome =
+                HOME_PATHS.blue.some(
+                  ([r, c]) =>
+                    r === row &&
+                    c === col
+                );
+
+              // ---------------------------------------------
+              // CELL COLORS
+              // ---------------------------------------------
+
+              let backgroundColor =
+                "rgba(56,69,42,0.55)";
+
+              let borderColor =
+                "rgba(216,216,198,0.08)";
+
+              if (isTrack) {
+                backgroundColor =
+                  BOARD_COLORS.cream;
+
+                borderColor =
+                  "rgba(56,69,42,0.18)";
+              }
+
+              if (isRedHome) {
+                backgroundColor =
+                  "rgba(201,74,74,0.55)";
+              }
+
+              if (isGreenHome) {
+                backgroundColor =
+                  "rgba(95,138,69,0.65)";
+              }
+
+              if (isYellowHome) {
+                backgroundColor =
+                  "rgba(212,173,69,0.65)";
+              }
+
+              if (isBlueHome) {
+                backgroundColor =
+                  "rgba(77,120,168,0.65)";
+              }
+
+              // ---------------------------------------------
+              // MAIN TRACK COINS
+              // ---------------------------------------------
+
+              const coins =
+                isTrack
+                  ? getCoinsForCell(
+                      game,
+                      cellNumber
+                    )
+                  : [];
+
+              // ---------------------------------------------
+              // HOME PATH COINS
+              // ---------------------------------------------
+
+              const homeCoins = [];
+
+              for (const player of players) {
+                if (player.isConnected === false) {
                   continue;
                 }
 
-                if (
-                  coordinate[0] === row &&
-                  coordinate[1] === col
-                ) {
-                  homeCoins.push({
-                    coin,
-                    player,
-                  });
+                for (const coin of player.coins || []) {
+
+                  if (
+                    coin.area !== "home"
+                  ) {
+                    continue;
+                  }
+
+                  const coordinate =
+                    getHomeCoordinate(
+                      player.color,
+                      coin.progress
+                    );
+
+                  if (!coordinate) {
+                    continue;
+                  }
+
+                  if (
+                    coordinate[0] ===
+                      row &&
+                    coordinate[1] ===
+                      col
+                  ) {
+                    homeCoins.push({
+                      coin,
+                      player,
+                    });
+                  }
                 }
               }
-            }
 
-            const isStartCell = [
-              0,
-              13,
-              26,
-              39,
-            ].includes(cellNumber);
+              // ---------------------------------------------
+              // START CELLS
+              // ---------------------------------------------
 
-            return (
-              <div
-                key={`${row}-${col}`}
-                className="relative flex items-center justify-center rounded-[3px]"
-                style={{
-                  backgroundColor,
-                  border:
-                    `1px solid ${borderColor}`,
-                }}
-              >
+              const isStartCell =
+                [
+                  0,
+                  13,
+                  26,
+                  39,
+                ].includes(
+                  cellNumber
+                );
 
-                {isTrack && (
-                  <span
-                    className="absolute left-0.5 top-0.5 text-[5px] font-bold"
-                    style={{
-                      color:
-                        BOARD_COLORS.background,
-                      opacity: 0.45,
-                    }}
-                  >
-                    {cellNumber}
-                  </span>
-                )}
+              return (
+                <div
+                  key={`${row}-${col}`}
+                  className="relative flex items-center justify-center rounded-[3px]"
+                  style={{
+                    backgroundColor,
+                    border:
+                      `1px solid ${borderColor}`,
+                  }}
+                >
 
-                {isStartCell && (
-                  <span
-                    className="absolute text-[9px] font-black sm:text-[11px]"
-                    style={{
-                      color:
-                        BOARD_COLORS.background,
-                    }}
-                  >
-                    ★
-                  </span>
-                )}
+                  {/* ========================================= */}
+                  {/* CELL NUMBER */}
+                  {/* ========================================= */}
 
-                {coins.length > 0 && (
-                  <div className="relative z-30 flex -space-x-1.5">
+                  {isTrack && (
+                    <span
+                      className="absolute left-0.5 top-0.5 text-[5px] font-bold"
+                      style={{
+                        color:
+                          BOARD_COLORS.background,
+                        opacity: 0.45,
+                      }}
+                    >
+                      {cellNumber}
+                    </span>
+                  )}
 
-                    {coins
-                      .slice(0, 4)
-                      .map(
+                  {/* ========================================= */}
+                  {/* START CELL */}
+                  {/* ========================================= */}
+
+                  {isStartCell && (
+                    <span
+                      className="absolute text-[9px] font-black sm:text-[11px]"
+                      style={{
+                        color:
+                          BOARD_COLORS.background,
+                      }}
+                    >
+                      ★
+                    </span>
+                  )}
+
+                  {/* ========================================= */}
+                  {/* MAIN TRACK COINS */}
+                  {/* ========================================= */}
+
+                  {coins.length > 0 && (
+                    <div className="relative z-30 flex -space-x-1.5">
+
+                      {coins
+                        .slice(0, 4)
+                        .map(
+                          ({
+                            coin,
+                            player,
+                          }) => {
+
+                            const style =
+                              getColorStyle(
+                                player.color
+                              );
+
+                            const isClickable =
+                              clickableCoinIds.has(
+                                coin.coinId
+                              ) &&
+                              player.userId ===
+                                userId;
+
+                            return (
+                              <button
+                                key={
+                                  coin.coinId
+                                }
+                                type="button"
+                                disabled={
+                                  !isClickable
+                                }
+                                onClick={() =>
+                                  isClickable &&
+                                  onCoinClick(
+                                    coin.coinId
+                                  )
+                                }
+                                title={
+                                  isClickable
+                                    ? `Move ${player.name}'s coin`
+                                    : `${player.name}'s coin`
+                                }
+                                className={`flex h-6 w-6 items-center justify-center rounded-full border text-[9px] font-black text-white shadow-md transition-all sm:h-8 sm:w-8 sm:text-[10px] ${
+                                  isClickable
+                                    ? "cursor-pointer scale-110"
+                                    : ""
+                                }`}
+                                style={{
+                                  backgroundColor:
+                                    style.main,
+
+                                  borderColor:
+                                    style.light,
+
+                                  boxShadow:
+                                    isClickable
+                                      ? `0 0 14px ${style.light}, 0 3px 8px ${style.soft}`
+                                      : `0 3px 8px ${style.soft}`,
+                                }}
+                              >
+                                ●
+                              </button>
+                            );
+                          }
+                        )}
+
+                    </div>
+                  )}
+
+                  {/* ========================================= */}
+                  {/* HOME PATH COINS */}
+                  {/* ========================================= */}
+
+                  {homeCoins.length > 0 && (
+                    <div className="relative z-30 flex -space-x-1.5">
+
+                      {homeCoins.map(
                         ({
                           coin,
                           player,
@@ -708,7 +997,7 @@ function LudoBoard({
                                   ? `Move ${player.name}'s coin`
                                   : `${player.name}'s coin`
                               }
-                              className={`flex h-6 w-6 items-center justify-center rounded-full border text-[9px] font-black text-white shadow-md transition-all sm:h-8 sm:w-8 sm:text-[10px] ${
+                              className={`relative z-30 flex h-6 w-6 items-center justify-center rounded-full border text-[9px] font-black text-white transition-all sm:h-8 sm:w-8 sm:text-[10px] ${
                                 isClickable
                                   ? "cursor-pointer scale-110"
                                   : ""
@@ -716,11 +1005,13 @@ function LudoBoard({
                               style={{
                                 backgroundColor:
                                   style.main,
+
                                 borderColor:
                                   style.light,
+
                                 boxShadow:
                                   isClickable
-                                    ? `0 0 14px ${style.light}, 0 3px 8px ${style.soft}`
+                                    ? `0 0 14px ${style.light}`
                                     : `0 3px 8px ${style.soft}`,
                               }}
                             >
@@ -730,76 +1021,25 @@ function LudoBoard({
                         }
                       )}
 
-                      {homeCoins.length > 0 && (
-                  <div className="relative z-30 flex -space-x-1.5">
-                    {homeCoins.map(
-                      ({ coin, player }) => {
+                    </div>
+                  )}
 
-                        const style =
-                          getColorStyle(
-                            player.color
-                          );
-
-                        const isClickable =
-                          clickableCoinIds.has(
-                            coin.coinId
-                          ) &&
-                          player.userId === userId;
-
-                        return (
-                          <button
-                            key={coin.coinId}
-                            type="button"
-                            disabled={!isClickable}
-                            onClick={() =>
-                              isClickable &&
-                              onCoinClick(
-                                coin.coinId
-                              )
-                            }
-                            className={`flex h-6 w-6 items-center justify-center rounded-full border text-[9px] font-black text-white transition-all sm:h-8 sm:w-8 sm:text-[10px] ${
-                              isClickable
-                                ? "cursor-pointer scale-110"
-                                : ""
-                            }`}
-                            style={{
-                              backgroundColor:
-                                style.main,
-
-                              borderColor:
-                                style.light,
-
-                              boxShadow:
-                                isClickable
-                                  ? `0 0 14px ${style.light}`
-                                  : `0 3px 8px ${style.soft}`,
-                            }}
-                          >
-                            ●
-                          </button>
-                        );
-                      }
-                    )}
-                  </div>
-                )}
-
-                  </div>
-                )}
-
-              </div>
-            );
-          })}
+                </div>
+              );
+            }
+          )}
 
         </div>
 
-
-        {/* ======================================= */}
+        {/* ================================================= */}
         {/* BASES */}
-        {/* ======================================= */}
+        {/* ================================================= */}
 
         <BaseArea
           player={redPlayer}
-          onCoinClick={onCoinClick}
+          onCoinClick={
+            onCoinClick
+          }
           clickableCoinIds={
             clickableCoinIds
           }
@@ -807,7 +1047,9 @@ function LudoBoard({
 
         <BaseArea
           player={greenPlayer}
-          onCoinClick={onCoinClick}
+          onCoinClick={
+            onCoinClick
+          }
           clickableCoinIds={
             clickableCoinIds
           }
@@ -815,7 +1057,9 @@ function LudoBoard({
 
         <BaseArea
           player={yellowPlayer}
-          onCoinClick={onCoinClick}
+          onCoinClick={
+            onCoinClick
+          }
           clickableCoinIds={
             clickableCoinIds
           }
@@ -823,110 +1067,37 @@ function LudoBoard({
 
         <BaseArea
           player={bluePlayer}
-          onCoinClick={onCoinClick}
+          onCoinClick={
+            onCoinClick
+          }
           clickableCoinIds={
             clickableCoinIds
           }
         />
 
-
-        {/* ======================================= */}
-        {/* CENTER */}
-        {/* ======================================= */}
-
-
-        <div className="absolute inset-0 flex items-center justify-center">
-
-          <div className="grid grid-cols-2 gap-1">
-
-            {players.flatMap((player) =>
-              getFinishedCoins(player).map(
-                (coin) => {
-                  const style =
-                    getColorStyle(
-                      player.color
-                    );
-
-                  return (
-                    <div
-                      key={coin.coinId}
-                      className="flex h-5 w-5 items-center justify-center rounded-full border text-[8px] font-black text-white"
-                      style={{
-                        backgroundColor:
-                          style.main,
-                        borderColor:
-                          style.light,
-                      }}
-                      title={`${player.name} - Finished`}
-                    >
-                      ✓
-                    </div>
-                  );
-                }
-              )
-            )}
-
-          </div>
-
-        </div>
-
-        <div
-          className="pointer-events-none absolute left-1/2 top-1/2 z-40 flex h-[19%] w-[19%] -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2"
-          style={{
-            backgroundColor:
-              BOARD_COLORS.panel,
-            borderColor:
-              BOARD_COLORS.accent,
-            boxShadow:
-              "0 0 25px rgba(164,174,122,0.3)",
-          }}
-        >
-
-          <div className="text-center">
-
-            <div
-              className="text-2xl font-black sm:text-3xl"
-              style={{
-                color:
-                  BOARD_COLORS.cream,
-              }}
-            >
-              ↻
-            </div>
-
-            <p
-              className="text-[7px] font-black tracking-[0.18em] sm:text-[9px]"
-              style={{
-                color:
-                  BOARD_COLORS.accent,
-              }}
-            >
-              REVERSE
-            </p>
-
-          </div>
-
-        </div>
-
       </div>
 
-
-      {/* ========================================= */}
+      {/* ================================================== */}
       {/* PLAYER PANELS */}
-      {/* ========================================= */}
+      {/* ================================================== */}
 
       <div className="mx-auto mt-4 grid w-full max-w-[620px] grid-cols-2 gap-2">
 
-        {players.map((player) => (
-          <PlayerPanel
-            key={player.userId}
-            player={player}
-            isCurrent={
-              game.currentTurn?.playerId ===
-              player.userId
-            }
-          />
-        ))}
+        {players.map(
+          (player) => (
+            <PlayerPanel
+              key={
+                player.userId
+              }
+              player={player}
+              isCurrent={
+                game.currentTurn
+                  ?.playerId ===
+                player.userId
+              }
+            />
+          )
+        )}
 
       </div>
 

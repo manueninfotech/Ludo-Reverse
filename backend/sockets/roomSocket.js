@@ -10,6 +10,7 @@ import {
   rollGameDice,
   getLegalMoves,
   moveCoin,
+  checkGameFinished,
   prepareGameExtraTurn,
   completeGameTurn,
 } from "../services/game/gameEngine.js";
@@ -100,6 +101,120 @@ export const registerRoomSocket = (io, socket) => {
   });
 
 
+// --------------------------------------------------------
+// RESUME ROOM
+// --------------------------------------------------------
+
+socket.on("resume_room", (data, callback) => {
+  const { roomId, userId } = data;
+
+  if (!roomId || !userId) {
+    return callback?.({
+      success: false,
+      reason: "Room ID and user ID are required.",
+    });
+  }
+
+  const room = getRoom({
+    roomId: roomId.trim().toUpperCase(),
+  });
+
+  if (!room) {
+    return callback?.({
+      success: false,
+      reason: "Room not found.",
+    });
+  }
+
+  // Find the existing player in the room.
+  const roomPlayer = room.players.find(
+    (player) => player.userId === userId
+  );
+
+  if (!roomPlayer) {
+    return callback?.({
+      success: false,
+      reason: "Player is not a member of this room.",
+    });
+  }
+
+  // Mark room player as connected again.
+  room.players = room.players.map((player) => {
+    if (player.userId !== userId) {
+      return player;
+    }
+
+    return {
+      ...player,
+      isConnected: true,
+    };
+  });
+
+  // Mark game player as connected again.
+  if (room.game) {
+    room.game = {
+      ...room.game,
+
+      players: room.game.players.map((player) => {
+        if (player.userId !== userId) {
+          return player;
+        }
+
+        return {
+          ...player,
+          isConnected: true,
+        };
+      }),
+    };
+  }
+
+  // Rejoin the Socket.IO room.
+  socket.join(room.roomId);
+
+  // Restore socket identity.
+  socket.data.roomId = room.roomId;
+  socket.data.userId = userId;
+
+  callback?.({
+    success: true,
+    room,
+    game: room.game,
+  });
+
+  // Send the latest room/game state to everyone.
+  io.to(room.roomId).emit("room_updated", {
+    ...room,
+    players: [...room.players],
+  });
+
+  // If a game is running, send the current timer state
+  // without restarting/resetting the timer.
+  if (
+    room.game &&
+    room.game.currentTurn &&
+    room.game.currentTurn.turnExpiresAt
+  ) {
+    const remainingMs =
+      new Date(
+        room.game.currentTurn.turnExpiresAt
+      ).getTime() - Date.now();
+
+    const remainingSeconds = Math.max(
+      0,
+      Math.ceil(remainingMs / 1000)
+    );
+
+    socket.emit("turn_timer", {
+      roomId: room.roomId,
+      playerId: room.game.currentTurn.playerId,
+      remainingSeconds,
+      expiresAt:
+        room.game.currentTurn.turnExpiresAt,
+    });
+  }
+});
+
+
   // --------------------------------------------------------
   // START GAME
   // --------------------------------------------------------
@@ -163,9 +278,10 @@ socket.on("roll_dice", (data, callback) => {
 
   // Roll dice through game engine
   const result = rollGameDice({
-    game: room.game,
-    diceValue,
-  });
+  game: room.game,
+  playerId: userId,
+  diceValue,
+});
 
   if (!result.success) {
     return callback?.({
@@ -176,6 +292,33 @@ socket.on("roll_dice", (data, callback) => {
 
   // Update room game state
   room.game = result.game;
+
+  const finishResult = checkGameFinished({
+  game: room.game,
+});
+
+if (finishResult.finished) {
+  room.game = finishResult.game;
+
+  clearTurnTimer({
+    roomId,
+  });
+
+  io.to(roomId).emit("game_finished", {
+    game: room.game,
+    winner: finishResult.winner,
+  });
+
+  callback?.({
+    success: true,
+    game: room.game,
+    capture: result.capture,
+    finished: true,
+    winnerId: finishResult.winner.userId,
+  });
+
+  return;
+}
 
   // Get legal moves after dice roll
   let legalMoves = getLegalMoves({
@@ -510,5 +653,68 @@ const userId = socket.data.userId;
       userId,
       roomId,
     });
+
+    const connectedPlayers =
+  room.game?.players?.filter(
+    (player) =>
+      player.isConnected !== false
+  ) || [];
+
+if (
+  room.game &&
+  room.game.status === "playing" &&
+  connectedPlayers.length === 1
+) {
+  const winner = connectedPlayers[0];
+
+  clearTurnTimer({
+    roomId,
   });
+
+  room.game = {
+    ...room.game,
+    status: "finished",
+    winnerId: winner.userId,
+    currentTurn: {
+      ...room.game.currentTurn,
+      turnExpiresAt: null,
+    },
+  };
+
+  io.to(roomId).emit("game_finished", {
+    game: room.game,
+    winner,
+    reason: "opponent_disconnected",
+  });
+
+  return;
+}
+if (
+  room.game &&
+  room.game.status === "playing" &&
+  room.game.currentTurn?.playerId === userId
+) {
+  clearTurnTimer({ roomId });
+
+  const result = completeGameTurn({
+    game: room.game,
+  });
+
+  if (result.success) {
+    room.game = result.game;
+
+    io.to(roomId).emit("turn_changed", {
+      game: room.game,
+    });
+
+    startTurnTimer({
+      io,
+      roomId,
+      game: room.game,
+    });
+  }
+}
+  });
+
+  
 };
