@@ -6,13 +6,13 @@ import assert from "node:assert/strict";
 
 import {
   createInitialGameState,
-} from "./gameEngine.js";
+} from "../../services/game/gameEngine.js";
 
 import {
   startTurnTimer,
   clearTurnTimer,
   handleTurnTimeout,
-} from "./turnTimer.js";
+} from "../../services/game/turnTimer.js";
 
 console.log("Running turn timer tests...\n");
 

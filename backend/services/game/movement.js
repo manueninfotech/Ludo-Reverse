@@ -151,94 +151,43 @@ export const getAbsoluteCell = (
 
 export const getAreaFromProgress = (
   progress,
-  playerCount,
-  playerColor = null
+  playerCount
 ) => {
-  const board =
-    getBoardConfig(playerCount);
+  const board = getBoardConfig(playerCount);
 
   if (!board) {
     return null;
   }
 
-  if (
-    progress ===
-    BASE_PROGRESS
-  ) {
+  if (progress === BASE_PROGRESS) {
     return "base";
   }
 
-  // ----------------------------------------------------------
-  // Determine home-entry progress.
-  // ----------------------------------------------------------
-  //
-  // Normally playerColor is supplied.
-  // The fallback below preserves compatibility with older
-  // callers that only check area ranges.
-  //
-  // For actual movement, playerColor is always supplied.
-  // ----------------------------------------------------------
-
-  if (playerColor) {
-    const homeEntryProgress =
-      getHomeEntryProgress(
-        playerColor,
-        playerCount
-      );
-
-    if (
-      homeEntryProgress === null
-    ) {
-      return null;
-    }
-
-    if (
-      progress >= 0 &&
-      progress <= homeEntryProgress
-    ) {
-      return "main";
-    }
-
-    if (
-      progress >
-        homeEntryProgress &&
-      progress <
-        board.finishPosition
-    ) {
-      return "home";
-    }
-
-    if (
-      progress ===
-      board.finishPosition
-    ) {
-      return FINISHED_AREA;
-    }
-
-    return null;
-  }
-
-  // ----------------------------------------------------------
-  // Backward-compatible fallback.
-  // ----------------------------------------------------------
+  // Standard 4-player board:
+  // 0–50  = main track
+  // 51–55 = home path
+  // 56    = finished
+  const mainTrackProgressEnd =
+    playerCount <= 4
+      ? board.trackSize - 2
+      : board.trackSize - 1;
 
   if (
     progress >= 0 &&
-    progress < board.trackSize
+    progress <= mainTrackProgressEnd
   ) {
     return "main";
   }
 
   if (
-    progress >= board.trackSize &&
+    progress > mainTrackProgressEnd &&
     progress < board.finishPosition
   ) {
     return "home";
   }
 
   if (
-    progress ===
-    board.finishPosition
+    progress === board.finishPosition
   ) {
     return FINISHED_AREA;
   }

@@ -2,16 +2,26 @@ import {
   rollGameDice,
   getLegalMoves,
   moveCoin,
+  checkGameFinished,
   prepareGameExtraTurn,
   completeGameTurn,
 } from "./gameEngine.js";
+
+import {
+  recordCompletedGame,
+} from "../stats/userStatsService.js";
+
+import {
+  getLocalGame,
+  updateLocalGame,
+} from "../local/localGameManager.js";
 
 const TURN_TIME_MS = 30 * 1000;
 
 const MAX_MISSED_TURNS = 5;
 
 const activeTimers = new Map();
-
+const activeLocalTimers = new Map();
 /**
  * Generate a random dice value.
  */
@@ -34,6 +44,700 @@ export const clearTurnTimer = ({ roomId }) => {
 
   activeTimers.delete(roomId);
 };
+
+export const clearLocalTurnTimer = ({ gameId }) => {
+  const timer = activeLocalTimers.get(gameId);
+
+  if (!timer) {
+    return;
+  }
+
+  clearTimeout(timer.timeout);
+  clearInterval(timer.interval);
+
+  activeLocalTimers.delete(gameId);
+};
+
+const registerLocalMissedTurn = ({
+  game,
+  playerId,
+}) => {
+  if (!game) {
+    return {
+      missedTurns: 0,
+      disconnected: false,
+    };
+  }
+
+  let missedTurns = 0;
+
+  const updatedGame = {
+    ...game,
+
+    players: game.players.map((player) => {
+      if (player.userId !== playerId) {
+        return player;
+      }
+
+      missedTurns =
+        (player.missedTurns ?? 0) + 1;
+
+      return {
+        ...player,
+        missedTurns,
+      };
+    }),
+  };
+
+  return {
+    game: updatedGame,
+    missedTurns,
+    disconnected:
+      missedTurns >= MAX_MISSED_TURNS,
+  };
+};
+
+const disconnectLocalTimedOutPlayer = ({
+  io,
+  gameId,
+  game,
+  playerId,
+}) => {
+  clearLocalTurnTimer({
+    gameId,
+  });
+
+  const updatedGame = {
+    ...game,
+
+    players: game.players.map((player) => {
+      if (player.userId !== playerId) {
+        return player;
+      }
+
+      return {
+        ...player,
+        isConnected: false,
+      };
+    }),
+  };
+
+  const connectedPlayers =
+    updatedGame.players.filter(
+      (player) => player.isConnected !== false
+    );
+
+  // ----------------------------------------------------------
+  // 2 PLAYERS → REMAINING PLAYER WINS
+  // ----------------------------------------------------------
+
+  if (connectedPlayers.length === 1) {
+    const winner = connectedPlayers[0];
+
+    const finishedGame = {
+      ...updatedGame,
+
+      status: "finished",
+
+      winnerId: winner.userId,
+
+      currentTurn: {
+        ...updatedGame.currentTurn,
+        turnExpiresAt: null,
+      },
+    };
+
+    updateLocalGame({
+      gameId,
+      game: finishedGame,
+    });
+
+    io.to(gameId).emit("local_game_finished", {
+      game: finishedGame,
+      winner,
+      reason: "player_auto_disconnected",
+    });
+
+    return;
+  }
+
+  // ----------------------------------------------------------
+  // 3+ PLAYERS → CONTINUE GAME
+  // ----------------------------------------------------------
+
+  updateLocalGame({
+    gameId,
+    game: updatedGame,
+  });
+
+  io.to(gameId).emit("local_player_disconnected", {
+    playerId,
+    reason: "miss_limit_reached",
+    game: updatedGame,
+  });
+
+  // Move to the next connected player
+  const nextTurnResult = completeGameTurn({
+    game: updatedGame,
+  });
+
+  if (!nextTurnResult.success) {
+    console.error(
+      "[LOCAL TIMER] Failed to skip disconnected player:",
+      nextTurnResult.reason
+    );
+
+    return;
+  }
+
+  const nextGame = nextTurnResult.game;
+
+  updateLocalGame({
+    gameId,
+    game: nextGame,
+  });
+
+  io.to(gameId).emit("local_turn_changed", {
+    gameId,
+    game: nextGame,
+    auto: true,
+  });
+
+  if (nextGame.status === "playing") {
+    startLocalTurnTimer({
+      io,
+      gameId,
+    });
+  }
+};
+
+export const startLocalTurnTimer = ({ io, gameId }) => {
+  clearLocalTurnTimer({ gameId });
+
+  const localGame = getLocalGame({ gameId });
+
+  if (
+    !localGame?.game ||
+    localGame.game.status !== "playing"
+  ) {
+    return;
+  }
+
+  const playerId = localGame.game.currentTurn.playerId;
+
+  if (!playerId) {
+    return;
+  }
+
+  const expiresAt = Date.now() + TURN_TIME_MS;
+
+  const updatedGame = {
+    ...localGame.game,
+    currentTurn: {
+      ...localGame.game.currentTurn,
+      turnExpiresAt: new Date(expiresAt),
+    },
+  };
+
+  updateLocalGame({
+    gameId,
+    game: updatedGame,
+  });
+
+  let remainingSeconds = 30;
+
+  io.to(gameId).emit("local_turn_timer", {
+    gameId,
+    playerId,
+    remainingSeconds,
+    expiresAt,
+  });
+
+  const interval = setInterval(() => {
+    const currentTimer = activeLocalTimers.get(gameId);
+
+    if (!currentTimer || currentTimer.interval !== interval) {
+      clearInterval(interval);
+      return;
+    }
+
+    const remainingMs = expiresAt - Date.now();
+
+    remainingSeconds = Math.max(
+      0,
+      Math.ceil(remainingMs / 1000)
+    );
+
+    io.to(gameId).emit("local_turn_timer", {
+      gameId,
+      playerId,
+      remainingSeconds,
+      expiresAt,
+    });
+
+    if (remainingMs <= 0) {
+      clearInterval(interval);
+    }
+  }, 1000);
+
+  const timeout = setTimeout(() => {
+  console.log(
+    "[LOCAL TIMER] 30 SECOND TIMEOUT CALLBACK FIRED",
+    {
+      gameId,
+      playerId,
+      expiresAt: new Date(expiresAt).toISOString(),
+      now: new Date().toISOString(),
+    }
+  );
+
+  clearInterval(interval);
+
+  const currentTimer = activeLocalTimers.get(gameId);
+
+  console.log(
+    "[LOCAL TIMER] CURRENT TIMER CHECK",
+    {
+      exists: !!currentTimer,
+      sameTimeout:
+        !!currentTimer &&
+        currentTimer.timeout === timeout,
+    }
+  );
+
+  if (
+    !currentTimer ||
+    currentTimer.timeout !== timeout
+  ) {
+    return;
+  }
+
+  activeLocalTimers.delete(gameId);
+
+console.log(
+  "[LOCAL TIMER] CALLING handleLocalTurnTimeout NOW",
+  {
+    gameId,
+    playerId,
+  }
+);
+
+handleLocalTurnTimeout({
+  io,
+  gameId,
+  playerId,
+  expiresAt,
+});
+}, TURN_TIME_MS);
+
+  activeLocalTimers.set(gameId, {
+    timeout,
+    interval,
+    playerId,
+    expiresAt,
+  });
+};
+
+
+const handleLocalTurnTimeout = ({
+  io,
+  gameId,
+  playerId,
+  expiresAt,
+}) => {
+  console.log(
+    "[LOCAL TIMEOUT] ENTERED handleLocalTurnTimeout"
+  );
+
+  const localGame = getLocalGame({ gameId });
+
+  console.log(
+    "[LOCAL TIMEOUT] getLocalGame RESULT",
+    {
+      exists: !!localGame,
+      hasGame: !!localGame?.game,
+      status: localGame?.game?.status,
+    }
+  );
+
+  if (
+    !localGame?.game ||
+    localGame.game.status !== "playing"
+  ) {
+    console.log(
+      "[LOCAL TIMEOUT] RETURNING - GAME NOT AVAILABLE OR NOT PLAYING"
+    );
+    return;
+  }
+
+  console.log(
+    "[LOCAL TIMEOUT] GAME IS PLAYING - CONTINUING"
+  );
+
+  const currentTurn = localGame.game.currentTurn;
+
+console.log(
+  "[LOCAL TIMEOUT] CURRENT TURN CHECK",
+  {
+    currentPlayer: currentTurn.playerId,
+    timeoutPlayer: playerId,
+    currentExpiresAt: currentTurn.turnExpiresAt,
+    timeoutExpiresAt: new Date(expiresAt),
+    hasRolled: currentTurn.hasRolled,
+  }
+);
+
+// Ignore stale timer
+if (
+  currentTurn.playerId !== playerId ||
+  !currentTurn.turnExpiresAt ||
+  new Date(currentTurn.turnExpiresAt).getTime() !==
+    new Date(expiresAt).getTime()
+) {
+  console.log(
+    "[LOCAL TIMEOUT] STALE TIMER - RETURNING"
+  );
+  return;
+}
+
+const missResult = registerLocalMissedTurn({
+  game: localGame.game,
+  playerId,
+});
+
+console.log(
+  `[LOCAL TIMER] ${gameId} - ${playerId} missed turn ${missResult.missedTurns}/${MAX_MISSED_TURNS}`
+);
+
+updateLocalGame({
+  gameId,
+  game: missResult.game,
+});
+
+console.log("[LOCAL MISS CHECK]", {
+  gameId,
+  playerId,
+  missedTurns: missResult.missedTurns,
+  maxMissedTurns: MAX_MISSED_TURNS,
+  disconnected: missResult.disconnected,
+});
+
+if (missResult.disconnected) {
+  console.log(
+    `[LOCAL TIMER] ${gameId} - ${playerId} reached ${MAX_MISSED_TURNS} missed turns`
+  );
+
+  disconnectLocalTimedOutPlayer({
+    io,
+    gameId,
+    game: missResult.game,
+    playerId,
+  });
+
+  return;
+}
+
+console.log(
+  "[LOCAL TIMEOUT] TIMER VALID - STARTING AUTO ROLL"
+);
+
+  // ----------------------------------------------------------
+  // AUTOMATIC DICE ROLL
+  // ----------------------------------------------------------
+
+  const diceValue = getRandomDiceValue();
+
+  console.log(
+    `[LOCAL TURN TIMER] ${gameId} - ${playerId} timed out. Auto rolling ${diceValue}`
+  );
+
+  const gameForAutoRoll = {
+  ...missResult.game,
+  currentTurn: {
+    ...missResult.game.currentTurn,
+    turnExpiresAt: null,
+  },
+};  
+
+  const rollResult = rollGameDice({
+    game: gameForAutoRoll,
+    playerId,
+    diceValue,
+  });
+
+  if (!rollResult.success) {
+    console.error(
+      "[LOCAL TURN TIMER] Automatic dice roll failed:",
+      rollResult.reason
+    );
+    return;
+  }
+
+  let updatedGame = rollResult.game;
+
+  updateLocalGame({
+    gameId,
+    game: updatedGame,
+  });
+
+  // ----------------------------------------------------------
+  // GET LEGAL MOVES
+  // ----------------------------------------------------------
+
+  const legalMoves = getLegalMoves({
+    game: updatedGame,
+  });
+
+  io.to(gameId).emit("local_dice_rolled", {
+    game: updatedGame,
+    diceValue,
+    legalMoves,
+    auto: true,
+  });
+
+  // ----------------------------------------------------------
+  // NO LEGAL MOVES
+  // ----------------------------------------------------------
+
+  if (legalMoves.length === 0) {
+    const nextTurnResult = completeGameTurn({
+      game: updatedGame,
+    });
+
+    if (!nextTurnResult.success) {
+      console.error(
+        "[LOCAL TURN TIMER] Automatic turn change failed:",
+        nextTurnResult.reason
+      );
+      return;
+    }
+
+    updatedGame = nextTurnResult.game;
+
+    updateLocalGame({
+      gameId,
+      game: updatedGame,
+    });
+
+    io.to(gameId).emit("local_turn_changed", {
+      gameId,
+      game: updatedGame,
+      auto: true,
+    });
+
+    if (updatedGame.status === "playing") {
+      startLocalTurnTimer({
+        io,
+        gameId,
+      });
+    }
+
+    return;
+  }
+
+  // ----------------------------------------------------------
+  // AUTOMATICALLY MOVE A LEGAL COIN
+  // ----------------------------------------------------------
+
+  const selectedMove =
+    legalMoves.find(
+      (move) => move.direction === "forward"
+    ) || legalMoves[0];
+
+  const gameForAutoMove = {
+    ...updatedGame,
+    currentTurn: {
+      ...updatedGame.currentTurn,
+      turnExpiresAt: null,
+    },
+  };
+
+  const moveResult = moveCoin({
+    game: gameForAutoMove,
+    playerId,
+    coinId: selectedMove.coinId,
+    direction: selectedMove.direction,
+  });
+
+  if (!moveResult.success) {
+    console.error(
+      "[LOCAL TURN TIMER] Automatic coin move failed:",
+      moveResult.reason
+    );
+
+    const nextTurnResult = completeGameTurn({
+      game: updatedGame,
+    });
+
+    if (!nextTurnResult.success) {
+      return;
+    }
+
+    updatedGame = nextTurnResult.game;
+
+    updateLocalGame({
+      gameId,
+      game: updatedGame,
+    });
+
+    io.to(gameId).emit("local_turn_changed", {
+      gameId,
+      game: updatedGame,
+      auto: true,
+    });
+
+    if (updatedGame.status === "playing") {
+      startLocalTurnTimer({
+        io,
+        gameId,
+      });
+    }
+
+    return;
+  }
+
+  updatedGame = moveResult.game;
+
+  // ----------------------------------------------------------
+  // CHECK GAME FINISHED / PLAYER FINISHED
+  // ----------------------------------------------------------
+
+  const previousFinishCount =
+    updatedGame.finishOrder?.length || 0;
+
+  const finishResult = checkGameFinished({
+    game: updatedGame,
+  });
+
+  updatedGame = finishResult.game;
+
+  const newFinishCount =
+    updatedGame.finishOrder?.length || 0;
+
+  const playerFinished =
+    newFinishCount > previousFinishCount;
+
+  updateLocalGame({
+    gameId,
+    game: updatedGame,
+  });
+
+  io.to(gameId).emit("local_coin_moved", {
+    game: updatedGame,
+    capture: moveResult.capture,
+    auto: true,
+  });
+
+  // ----------------------------------------------------------
+  // GAME FINISHED
+  // ----------------------------------------------------------
+
+  if (updatedGame.status === "finished") {
+    clearLocalTurnTimer({
+      gameId,
+    });
+
+    io.to(gameId).emit("local_game_finished", {
+      game: updatedGame,
+      auto: true,
+    });
+
+    return;
+  }
+
+  // ----------------------------------------------------------
+  // PLAYER FINISHED - GAME CONTINUES
+  // ----------------------------------------------------------
+
+  if (playerFinished) {
+    io.to(gameId).emit("local_turn_changed", {
+      gameId,
+      game: updatedGame,
+      auto: true,
+    });
+
+    startLocalTurnTimer({
+      io,
+      gameId,
+    });
+
+    return;
+  }
+
+  // ----------------------------------------------------------
+  // EXTRA TURN
+  // ----------------------------------------------------------
+
+  if (updatedGame.currentTurn.extraTurn === true) {
+    const extraTurnResult = prepareGameExtraTurn({
+      game: updatedGame,
+    });
+
+    if (!extraTurnResult.success) {
+      console.error(
+        "[LOCAL TURN TIMER] Automatic extra turn failed:",
+        extraTurnResult.reason
+      );
+      return;
+    }
+
+    updatedGame = extraTurnResult.game;
+
+    updateLocalGame({
+      gameId,
+      game: updatedGame,
+    });
+
+    io.to(gameId).emit("local_turn_changed", {
+      gameId,
+      game: updatedGame,
+      auto: true,
+    });
+
+    startLocalTurnTimer({
+      io,
+      gameId,
+    });
+
+    return;
+  }
+
+  // ----------------------------------------------------------
+  // NORMAL TURN - NEXT PLAYER
+  // ----------------------------------------------------------
+
+  const nextTurnResult = completeGameTurn({
+    game: updatedGame,
+  });
+
+  if (!nextTurnResult.success) {
+    console.error(
+      "[LOCAL TURN TIMER] Automatic turn change failed:",
+      nextTurnResult.reason
+    );
+    return;
+  }
+
+  updatedGame = nextTurnResult.game;
+
+  updateLocalGame({
+    gameId,
+    game: updatedGame,
+  });
+
+  io.to(gameId).emit("local_turn_changed", {
+    gameId,
+    game: updatedGame,
+    auto: true,
+  });
+
+  startLocalTurnTimer({
+    io,
+    gameId,
+  });
+};
+
+  
 
 /**
  * Emit the current timer state.
@@ -192,7 +896,7 @@ const registerMissedTurn = ({
   };
 };
 
-const disconnectTimedOutPlayer = ({
+const disconnectTimedOutPlayer = async ({
   io,
   room,
   playerId,
@@ -236,6 +940,18 @@ const disconnectTimedOutPlayer = ({
       },
     };
 
+    try {
+  await recordCompletedGame({
+    game: room.game,
+    result: "disconnected",
+  });
+} catch (error) {
+  console.error(
+    "Failed to record timeout-disconnect game statistics:",
+    error
+  );
+}
+
     io.to(room.roomId).emit("game_finished", {
       game: room.game,
       winner,
@@ -260,6 +976,40 @@ const disconnectTimedOutPlayer = ({
   }
 
   room.game = result.game;
+
+  const killedCoins = result.capture?.killedCoins || [];
+const killsThisMove = killedCoins.length;
+
+if (!room.game.statsTracking) {
+  room.game.statsTracking = {
+    finalized: false,
+    players: {},
+  };
+}
+
+room.game.players.forEach((player) => {
+  if (!room.game.statsTracking.players[player.userId]) {
+    room.game.statsTracking.players[player.userId] = {
+      kills: 0,
+      tokensCaptured: 0,
+    };
+  }
+});
+
+if (killsThisMove > 0) {
+  room.game.statsTracking.players[playerId].kills += killsThisMove;
+
+  killedCoins.forEach((killedCoin) => {
+    const killedPlayerId = killedCoin.playerId;
+
+    if (
+      killedPlayerId &&
+      room.game.statsTracking.players[killedPlayerId]
+    ) {
+      room.game.statsTracking.players[killedPlayerId].tokensCaptured += 1;
+    }
+  });
+}
 
   io.to(room.roomId).emit("player_disconnected", {
     playerId,
@@ -320,7 +1070,7 @@ if (missResult.disconnected) {
     `[TURN TIMER] ${room.roomId} - ${playerId} reached ${MAX_MISSED_TURNS} missed turns and was automatically disconnected`
   );
 
-  disconnectTimedOutPlayer({
+  await disconnectTimedOutPlayer({
     io,
     room,
     playerId,
@@ -590,6 +1340,24 @@ const moveResult = moveCoin({
 
   room.game = moveResult.game;
 
+  const killsThisMove =
+  moveResult.capture?.killedCoins?.length || 0;
+
+try {
+  await recordMove({
+    userId: currentPlayerId,
+    direction: selectedMove.direction,
+    kills: killsThisMove,
+    coinFinished:
+      moveResult.move?.to?.area === "finished",
+  });
+} catch (error) {
+  console.error(
+    "Failed to record automatic move statistics:",
+    error
+  );
+}
+
   io.to(room.roomId).emit("coin_moved", {
     game: room.game,
     coinId: selectedMove.coinId,
@@ -598,22 +1366,75 @@ const moveResult = moveCoin({
     auto: true,
   });
 
+  // ------------------------------------------------------
+// CHECK PLAYER FINISH
+// ------------------------------------------------------
+
+const previousFinishCount =
+  room.game.finishOrder?.length || 0;
+
+const finishResult =
+  checkGameFinished({
+    game: room.game,
+  });
+
+room.game = finishResult.game;
+
+const newFinishCount =
+  room.game.finishOrder?.length || 0;
+
+const playerFinished =
+  newFinishCount >
+  previousFinishCount;
+
   /**
    * If the move produced a winner/game finish,
    * don't start another timer.
    */
   if (room.game.status === "finished") {
-    clearTurnTimer({
-      roomId: room.roomId,
-    });
+  clearTurnTimer({ roomId: room.roomId });
 
-    io.to(room.roomId).emit("game_finished", {
+  let completedStats = {};
+
+  try {
+    completedStats = await recordCompletedGame({
       game: room.game,
-      auto: true,
+      result: "normal",
     });
-
-    return;
+  } catch (error) {
+    console.error(
+      "Failed to record automatic game completion statistics:",
+      error
+    );
   }
+
+  io.to(room.roomId).emit("game_finished", {
+    game: room.game,
+    stats: completedStats,
+    auto: true,
+  });
+
+  return;
+}
+
+
+  // ------------------------------------------------------
+// PLAYER FINISHED - GAME CONTINUES
+// ------------------------------------------------------
+
+if (playerFinished) {
+  io.to(room.roomId).emit("turn_changed", {
+    game: room.game,
+    auto: true,
+  });
+
+  startTurnTimer({
+    io,
+    room,
+  });
+
+  return;
+}
 
   /**
    * Extra turn:

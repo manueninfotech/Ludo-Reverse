@@ -17,6 +17,10 @@ const PLAYER_COLORS = {
   5: ["red", "green", "yellow", "blue", "orange"],
 
   6: ["red", "green", "orange", "blue", "yellow", "purple"],
+
+  7: ["red", "green", "orange", "blue", "yellow", "purple", "pink",],
+
+  8: ["red", "green", "orange", "blue", "yellow", "purple", "pink", "cyan",],
 };
 
 
@@ -82,10 +86,10 @@ export const createRoom = ({
   maxPlayers = 2,
 }) => {
 
-  if (![2, 3, 4, 5, 6].includes(maxPlayers)) {
+  if (![2, 3, 4, 5, 6, 7, 8].includes(maxPlayers)) {
     return {
       success: false,
-      reason: "Maximum players must be between 2 and 6.",
+      reason: "Maximum players must be between 2 and 8.",
     };
   }
 

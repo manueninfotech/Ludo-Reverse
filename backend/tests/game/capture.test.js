@@ -26,7 +26,7 @@ import {
   getCaptureResult,
   getsExtraTurnFromCapture,
   createCaptureEvent,
-} from "./capture.js";
+} from "../../services/game/capture.js";
 
 
 // ============================================================

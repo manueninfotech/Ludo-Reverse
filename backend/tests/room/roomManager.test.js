@@ -9,7 +9,7 @@ import {
   startGame,
   getRooms,
   clearRooms,
-} from "./roomManager.js";
+} from "../../services/room/roomManager.js";
 
 console.log("Running room manager tests...");
 
@@ -314,6 +314,195 @@ let roomId;
   console.log(
     "✓ all rooms retrieved"
   );
+}
+
+// ============================================================
+// 7-PLAYER ROOM
+// ============================================================
+
+{
+  const created = createRoom({
+    hostId: "user-1",
+    hostName: "Player 1",
+    maxPlayers: 7,
+  });
+
+  assert.equal(created.success, true);
+
+  let room = created.room;
+
+  const joinPlayers = [
+    ["user-2", "Player 2"],
+    ["user-3", "Player 3"],
+    ["user-4", "Player 4"],
+    ["user-5", "Player 5"],
+    ["user-6", "Player 6"],
+    ["user-7", "Player 7"],
+  ];
+
+  for (const [userId, name] of joinPlayers) {
+    const result = joinRoom({
+      roomId: room.roomId,
+      userId,
+      name,
+    });
+
+    assert.equal(result.success, true);
+    room = result.room;
+  }
+
+  assert.equal(room.players.length, 7);
+  assert.equal(room.maxPlayers, 7);
+
+  assert.deepEqual(
+    room.players.map((player) => player.color),
+    [
+      "red",
+      "green",
+      "orange",
+      "blue",
+      "yellow",
+      "purple",
+      "pink",
+    ]
+  );
+
+  const startCheck = canStartGame({
+    roomId: room.roomId,
+  });
+
+  assert.equal(startCheck.canStart, true);
+
+  console.log("✓ 7-player room");
+}
+
+// ============================================================
+// 8-PLAYER ROOM
+// ============================================================
+
+{
+  const created = createRoom({
+    hostId: "user-1",
+    hostName: "Player 1",
+    maxPlayers: 8,
+  });
+
+  assert.equal(created.success, true);
+
+  let room = created.room;
+
+  const joinPlayers = [
+    ["user-2", "Player 2"],
+    ["user-3", "Player 3"],
+    ["user-4", "Player 4"],
+    ["user-5", "Player 5"],
+    ["user-6", "Player 6"],
+    ["user-7", "Player 7"],
+    ["user-8", "Player 8"],
+  ];
+
+  for (const [userId, name] of joinPlayers) {
+    const result = joinRoom({
+      roomId: room.roomId,
+      userId,
+      name,
+    });
+
+    assert.equal(result.success, true);
+    room = result.room;
+  }
+
+  assert.equal(room.players.length, 8);
+  assert.equal(room.maxPlayers, 8);
+
+  assert.deepEqual(
+    room.players.map((player) => player.color),
+    [
+      "red",
+      "green",
+      "orange",
+      "blue",
+      "yellow",
+      "purple",
+      "pink",
+      "cyan",
+    ]
+  );
+
+  const startCheck = canStartGame({
+    roomId: room.roomId,
+  });
+
+  assert.equal(startCheck.canStart, true);
+
+  console.log("✓ 8-player room");
+}
+
+// ============================================================
+// 7 & 8 PLAYER GAME START
+// ============================================================
+
+{
+  const createAndFillRoom = ({
+    maxPlayers,
+  }) => {
+    const created = createRoom({
+      hostId: "host",
+      hostName: "Host",
+      maxPlayers,
+    });
+
+    assert.equal(created.success, true);
+
+    let room = created.room;
+
+    for (let i = 2; i <= maxPlayers; i++) {
+      const joined = joinRoom({
+        roomId: room.roomId,
+        userId: `user-${i}`,
+        name: `Player ${i}`,
+      });
+
+      assert.equal(joined.success, true);
+      room = joined.room;
+    }
+
+    return room;
+  };
+
+  // 7 players
+  const room7 = createAndFillRoom({
+    maxPlayers: 7,
+  });
+
+  const started7 = startGame({
+    roomId: room7.roomId,
+    userId: "host",
+  });
+
+  assert.equal(started7.success, true);
+  assert.equal(started7.room.status, "playing");
+  assert.equal(started7.room.game.playerCount, 7);
+  assert.equal(started7.room.game.players.length, 7);
+
+  console.log("✓ 7-player game started");
+
+  // 8 players
+  const room8 = createAndFillRoom({
+    maxPlayers: 8,
+  });
+
+  const started8 = startGame({
+    roomId: room8.roomId,
+    userId: "host",
+  });
+
+  assert.equal(started8.success, true);
+  assert.equal(started8.room.status, "playing");
+  assert.equal(started8.room.game.playerCount, 8);
+  assert.equal(started8.room.game.players.length, 8);
+
+  console.log("✓ 8-player game started");
 }
 
 

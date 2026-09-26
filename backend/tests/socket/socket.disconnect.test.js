@@ -7,16 +7,16 @@ import http from "node:http";
 import { Server } from "socket.io";
 import { io as createClient } from "socket.io-client";
 
-import { registerRoomSocket } from "../sockets/roomSocket.js";
+import { registerRoomSocket } from "../../sockets/roomSocket.js";
 
 import {
   clearRooms,
   getRoom,
-} from "./room/roomManager.js";
+} from "../../services/room/roomManager.js";
 
 import {
   clearTurnTimer,
-} from "./game/turnTimer.js";
+} from "../../services/game/turnTimer.js";
 
 console.log("Running Socket.IO disconnect tests...\n");
 

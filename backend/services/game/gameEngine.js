@@ -61,10 +61,10 @@ export const createInitialGameState = ({
   if (
     !Number.isInteger(playerCount) ||
     playerCount < 2 ||
-    playerCount > 6
+    playerCount > 8
   ) {
     throw new Error(
-      "Player count must be between 2 and 6."
+      "Player count must be between 2 and 8."
     );
   }
 
@@ -819,31 +819,148 @@ export const checkWinner = ({
 export const checkGameFinished = ({
   game,
 }) => {
-  const winner = checkWinner({
-    game,
-  });
-
-  if (!winner) {
+  if (
+    !game ||
+    !Array.isArray(game.players)
+  ) {
     return {
       finished: false,
-
       game,
     };
   }
 
+  const finishOrder = Array.isArray(
+    game.finishOrder
+  )
+    ? [...game.finishOrder]
+    : [];
+
+  // ------------------------------------------------------
+  // FIND A NEWLY FINISHED PLAYER
+  // ------------------------------------------------------
+
+  const newlyFinishedPlayer =
+    game.players.find((player) => {
+      const alreadyFinished =
+        finishOrder.includes(
+          player.userId
+        );
+
+      const allCoinsFinished =
+        Array.isArray(player.coins) &&
+        player.coins.length === 4 &&
+        player.coins.every(
+          (coin) =>
+            coin.area === "finished"
+        );
+
+      return (
+        allCoinsFinished &&
+        !alreadyFinished
+      );
+    });
+
+  // Nobody newly finished.
+  if (!newlyFinishedPlayer) {
+    return {
+      finished: false,
+      game: {
+        ...game,
+        finishOrder,
+      },
+    };
+  }
+
+  // Add player to finishing order.
+  finishOrder.push(
+    newlyFinishedPlayer.userId
+  );
+
+  // ------------------------------------------------------
+  // LAST ACTIVE PLAYER
+  // ------------------------------------------------------
+
+  const remainingPlayers =
+    game.players.filter(
+      (player) =>
+        !finishOrder.includes(
+          player.userId
+        )
+    );
+
+  // If only one player remains,
+  // that player is last place.
+  if (remainingPlayers.length <= 1) {
+    if (remainingPlayers.length === 1) {
+      finishOrder.push(
+        remainingPlayers[0].userId
+      );
+    }
+
+    return {
+      finished: true,
+
+      game: {
+        ...game,
+
+        status: "finished",
+
+        winnerId:
+          finishOrder[0] || null,
+
+        finishOrder,
+      },
+
+      winner:
+        game.players.find(
+          (player) =>
+            player.userId ===
+            finishOrder[0]
+        ) || null,
+    };
+  }
+
+  // ------------------------------------------------------
+  // GAME CONTINUES
+  // ------------------------------------------------------
+
+  const gameWithFinishOrder = {
+    ...game,
+
+    status: "playing",
+
+    winnerId:
+      finishOrder[0] || null,
+
+    finishOrder,
+
+  };
+
+  // IMPORTANT:
+  // Move immediately to the next active player.
+  //
+  // This prevents the player who just finished
+  // from receiving another turn, including
+  // an extra turn from rolling a six.
+
+  const nextTurnResult =
+    completeGameTurn({
+      game: gameWithFinishOrder,
+    });
+
+  if (!nextTurnResult.success) {
+    return {
+      finished: false,
+      game: gameWithFinishOrder,
+    };
+  }
+
   return {
-    finished: true,
+    finished: false,
 
-    game: {
-      ...game,
+    game: nextTurnResult.game,
 
-      status: "finished",
-
-      winnerId:
-        winner.userId,
-    },
-
-    winner,
+    winner: newlyFinishedPlayer,
   };
 };
 
@@ -908,30 +1025,67 @@ export const completeGameTurn = ({
     };
   }
 
-  const result = completeTurn({
-    players: game.players,
+  const finishOrder = Array.isArray(
+    game.finishOrder
+  )
+    ? game.finishOrder
+    : [];
 
-    turn: game.currentTurn,
-  });
+  let nextGame = {
+    ...game,
+  };
 
-  if (!result.success) {
-    return {
-      success: false,
-      reason: result.reason,
-      game,
+  // Try at most once for every player.
+  // This prevents an infinite loop.
+  for (
+    let attempt = 0;
+    attempt < game.players.length;
+    attempt++
+  ) {
+    const result = completeTurn({
+      players: nextGame.players,
+      turn: nextGame.currentTurn,
+    });
+
+    if (!result.success) {
+      return {
+        success: false,
+        reason: result.reason,
+        game,
+      };
+    }
+
+    nextGame = {
+      ...nextGame,
+      currentTurn: result.turn,
     };
+
+    const nextPlayerId =
+      nextGame.currentTurn.playerId;
+
+    // If this player has NOT finished,
+    // this is the correct next turn.
+    if (
+      !finishOrder.includes(
+        nextPlayerId
+      )
+    ) {
+      return {
+        success: true,
+        reason: null,
+        game: nextGame,
+      };
+    }
+
+    // Otherwise continue looping and skip
+    // this finished player.
   }
 
   return {
-    success: true,
-
-    reason: null,
-
-    game: {
-      ...game,
-
-      currentTurn: result.turn,
-    },
+    success: false,
+    reason:
+      "No active player is available for the next turn.",
+    game: nextGame,
   };
 };
 

@@ -17,11 +17,11 @@ import {
   checkGameFinished,
   prepareGameExtraTurn,
   completeGameTurn,
-} from "./gameEngine.js";
+} from "../../services/game/gameEngine.js";
 
 import {
   TURN_TIMEOUT_MS,
-} from "./turn.js";
+} from "../../services/game/turn.js";
 
 console.log("Running game engine tests...\n");
 
@@ -99,6 +99,53 @@ const players6 = [
   },
 ];
 
+const players7 = [
+  {
+    userId: "user-1",
+    name: "Player 1",
+    color: "red",
+  },
+  {
+    userId: "user-2",
+    name: "Player 2",
+    color: "green",
+  },
+  {
+    userId: "user-3",
+    name: "Player 3",
+    color: "orange",
+  },
+  {
+    userId: "user-4",
+    name: "Player 4",
+    color: "blue",
+  },
+  {
+    userId: "user-5",
+    name: "Player 5",
+    color: "yellow",
+  },
+  {
+    userId: "user-6",
+    name: "Player 6",
+    color: "purple",
+  },
+  {
+    userId: "user-7",
+    name: "Player 7",
+    color: "pink",
+  },
+];
+
+const players8 = [
+  ...players7,
+  {
+    userId: "user-8",
+    name: "Player 8",
+    color: "cyan",
+  },
+];
+
 
 // ============================================================
 // 1. CREATE INITIAL GAME - 2 PLAYERS
@@ -167,6 +214,83 @@ const players6 = [
   console.log("✓ create initial 6-player game");
 }
 
+// ============================================================
+// 7-PLAYER GAME
+// ============================================================
+
+{
+  const game = createInitialGameState({
+    playerCount: 7,
+    players: players7,
+  });
+
+  assert.equal(game.status, "playing");
+  assert.equal(game.playerCount, 7);
+  assert.equal(game.players.length, 7);
+  assert.equal(game.boardType, "seven-player");
+
+  console.log("✓ create initial 7-player game");
+}
+
+// ============================================================
+// 8-PLAYER GAME
+// ============================================================
+
+{
+  const game = createInitialGameState({
+    playerCount: 8,
+    players: players8,
+  });
+
+  assert.equal(game.status, "playing");
+  assert.equal(game.playerCount, 8);
+  assert.equal(game.players.length, 8);
+  assert.equal(game.boardType, "eight-player");
+
+  console.log("✓ create initial 8-player game");
+}
+
+// ============================================================
+// 7 & 8 PLAYER START CELLS
+// ============================================================
+
+{
+  const game7 = createInitialGameState({
+    playerCount: 7,
+    players: players7,
+  });
+
+  const expectedStartCells7 = [
+    0, 12, 24, 36, 48, 60, 72,
+  ];
+
+  game7.players.forEach((player, index) => {
+    assert.equal(
+      player.startCell,
+      expectedStartCells7[index]
+    );
+  });
+
+  console.log("✓ 7-player start cells assigned");
+
+  const game8 = createInitialGameState({
+    playerCount: 8,
+    players: players8,
+  });
+
+  const expectedStartCells8 = [
+    0, 12, 24, 36, 48, 60, 72, 84,
+  ];
+
+  game8.players.forEach((player, index) => {
+    assert.equal(
+      player.startCell,
+      expectedStartCells8[index]
+    );
+  });
+
+  console.log("✓ 8-player start cells assigned");
+}
 
 // ============================================================
 // 4. EVERY PLAYER GETS 4 COINS
@@ -245,18 +369,18 @@ const players6 = [
   });
 
   assert.equal(
-    game.players[0].startCell,
-    0
-  );
-
-  assert.equal(
-    game.players[1].startCell,
-    13
-  );
-
-  assert.equal(
-  game.players[2].startCell,
+  game.players[0].startCell,
   39
+);
+
+assert.equal(
+  game.players[1].startCell,
+  0
+);
+
+assert.equal(
+  game.players[2].startCell,
+  13
 );
 
 assert.equal(
@@ -700,7 +824,7 @@ assert.equal(
 
   assert.equal(
     movedCoin.absoluteCell,
-    0
+    39
   );
 
   assert.equal(
@@ -896,7 +1020,7 @@ assert.equal(
 
   assert.equal(
     movedCoin.absoluteCell,
-    4
+    43
   );
 
   // ----------------------------------------------------------
@@ -1129,7 +1253,7 @@ assert.equal(
 
   assert.equal(
     movedCoin.absoluteCell,
-    0
+    39
   );
 
   console.log("✓ backward can land exactly on start");
@@ -1398,6 +1522,347 @@ assert.equal(
   console.log("✓ game turn wraps around");
 }
 
+// ============================================================
+// 34. 7-PLAYER TURN ROTATION
+// ============================================================
+
+{
+  const game = createInitialGameState({
+    playerCount: 7,
+    players: players7,
+  });
+
+  let currentGame = game;
+
+  const expectedOrder = [
+    "user-1",
+    "user-2",
+    "user-3",
+    "user-4",
+    "user-5",
+    "user-6",
+    "user-7",
+    "user-1",
+  ];
+
+  for (let i = 0; i < expectedOrder.length - 1; i++) {
+    assert.equal(
+      currentGame.currentTurn.playerId,
+      expectedOrder[i]
+    );
+
+    const result = completeGameTurn({
+      game: currentGame,
+    });
+
+    assert.equal(result.success, true);
+
+    currentGame = result.game;
+  }
+
+  assert.equal(
+    currentGame.currentTurn.playerId,
+    "user-1"
+  );
+
+  console.log("✓ 7-player turn rotation");
+}
+
+// ============================================================
+// 35. 8-PLAYER TURN ROTATION
+// ============================================================
+
+{
+  const game = createInitialGameState({
+    playerCount: 8,
+    players: players8,
+  });
+
+  let currentGame = game;
+
+  const expectedOrder = [
+    "user-1",
+    "user-2",
+    "user-3",
+    "user-4",
+    "user-5",
+    "user-6",
+    "user-7",
+    "user-8",
+    "user-1",
+  ];
+
+  for (let i = 0; i < expectedOrder.length - 1; i++) {
+    assert.equal(
+      currentGame.currentTurn.playerId,
+      expectedOrder[i]
+    );
+
+    const result = completeGameTurn({
+      game: currentGame,
+    });
+
+    assert.equal(result.success, true);
+
+    currentGame = result.game;
+  }
+
+  assert.equal(
+    currentGame.currentTurn.playerId,
+    "user-1"
+  );
+
+  console.log("✓ 8-player turn rotation");
+}
+
+// ============================================================
+// 36. 7-PLAYER NORMAL MOVEMENT
+// ============================================================
+
+{
+  const game = createInitialGameState({
+    playerCount: 7,
+    players: players7,
+  });
+
+  const rolled = rollGameDice({
+    game,
+    diceValue: 6,
+  });
+
+  assert.equal(rolled.success, true);
+
+  const result = moveCoin({
+    game: rolled.game,
+    playerId: "user-1",
+    coinId: "user-1-coin-1",
+    direction: "forward",
+  });
+
+  assert.equal(result.success, true);
+
+  const movedCoin =
+    result.game.players[0].coins.find(
+      (coin) =>
+        coin.coinId === "user-1-coin-1"
+    );
+
+  assert.ok(movedCoin);
+
+  assert.equal(movedCoin.area, "main");
+  assert.equal(movedCoin.progress, 0);
+  assert.equal(movedCoin.absoluteCell, 0);
+
+  console.log("✓ 7-player normal movement");
+}
+
+// ============================================================
+// 37. 8-PLAYER NORMAL MOVEMENT
+// ============================================================
+
+{
+  const game = createInitialGameState({
+    playerCount: 8,
+    players: players8,
+  });
+
+  const rolled = rollGameDice({
+    game,
+    diceValue: 6,
+  });
+
+  assert.equal(rolled.success, true);
+
+  const result = moveCoin({
+    game: rolled.game,
+    playerId: "user-1",
+    coinId: "user-1-coin-1",
+    direction: "forward",
+  });
+
+  assert.equal(result.success, true);
+
+  const movedCoin =
+    result.game.players[0].coins.find(
+      (coin) =>
+        coin.coinId === "user-1-coin-1"
+    );
+
+  assert.ok(movedCoin);
+
+  assert.equal(movedCoin.area, "main");
+  assert.equal(movedCoin.progress, 0);
+  assert.equal(movedCoin.absoluteCell, 0);
+
+  console.log("✓ 8-player normal movement");
+}
+
+// ============================================================
+// 38. 7-PLAYER CAPTURE
+// ============================================================
+
+{
+  const game = createInitialGameState({
+    playerCount: 7,
+    players: players7,
+  });
+
+  const preparedGame = {
+    ...game,
+
+    players: game.players.map((player) => ({
+      ...player,
+      coins: player.coins.map((coin, index) => {
+        if (
+          player.userId === "user-1" &&
+          index === 0
+        ) {
+          return {
+            ...coin,
+            area: "main",
+            progress: 5,
+            absoluteCell: 5,
+          };
+        }
+
+        if (
+          player.userId === "user-7" &&
+          index === 0
+        ) {
+          return {
+            ...coin,
+            area: "main",
+            progress: 23,
+            absoluteCell: 11,
+          };
+        }
+
+        return coin;
+      }),
+    })),
+
+    currentTurn: {
+      ...game.currentTurn,
+      playerId: "user-1",
+      diceValue: 6,
+      hasRolled: true,
+      diceRolled: true,
+    },
+  };
+
+  const result = moveCoin({
+    game: preparedGame,
+    playerId: "user-1",
+    coinId: "user-1-coin-1",
+    direction: "forward",
+  });
+
+  assert.equal(result.success, true);
+
+  const capturedCoin =
+    result.game.players
+      .find(
+        (player) =>
+          player.userId === "user-7"
+      )
+      .coins[0];
+
+  assert.equal(
+    capturedCoin.area,
+    "base"
+  );
+
+  assert.equal(
+    capturedCoin.progress,
+    -1
+  );
+
+  console.log("✓ 7-player capture");
+}
+
+
+// ============================================================
+// 39. 8-PLAYER CAPTURE
+// ============================================================
+
+{
+  const game = createInitialGameState({
+    playerCount: 8,
+    players: players8,
+  });
+
+  const preparedGame = {
+    ...game,
+
+    players: game.players.map((player) => ({
+      ...player,
+      coins: player.coins.map((coin, index) => {
+        if (
+          player.userId === "user-1" &&
+          index === 0
+        ) {
+          return {
+            ...coin,
+            area: "main",
+            progress: 5,
+            absoluteCell: 5,
+          };
+        }
+
+        if (
+          player.userId === "user-8" &&
+          index === 0
+        ) {
+          return {
+            ...coin,
+            area: "main",
+            progress: 23,
+            absoluteCell: 11,
+          };
+        }
+
+        return coin;
+      }),
+    })),
+
+    currentTurn: {
+      ...game.currentTurn,
+      playerId: "user-1",
+      diceValue: 6,
+      hasRolled: true,
+      diceRolled: true,
+    },
+  };
+
+  const result = moveCoin({
+    game: preparedGame,
+    playerId: "user-1",
+    coinId: "user-1-coin-1",
+    direction: "forward",
+  });
+
+  assert.equal(result.success, true);
+
+  const capturedCoin =
+    result.game.players
+      .find(
+        (player) =>
+          player.userId === "user-8"
+      )
+      .coins[0];
+
+  assert.equal(
+    capturedCoin.area,
+    "base"
+  );
+
+  assert.equal(
+    capturedCoin.progress,
+    -1
+  );
+
+  console.log("✓ 8-player capture");
+}
 
 // ============================================================
 // 34. CHECK WINNER - NO WINNER
@@ -1530,6 +1995,291 @@ assert.equal(
   console.log("✓ game finishes when player wins");
 }
 
+// ============================================================
+//  7-PLAYER FINISH ORDER
+// ============================================================
+
+{
+  const game = createInitialGameState({
+    playerCount: 7,
+    players: players7,
+  });
+
+  const finishedGame = {
+    ...game,
+
+    players: game.players.map((player) => {
+      if (player.userId !== "user-1") {
+        return player;
+      }
+
+      return {
+        ...player,
+
+        coins: player.coins.map((coin) => ({
+          ...coin,
+          area: "finished",
+          progress: 89,
+          absoluteCell: null,
+        })),
+      };
+    }),
+  };
+
+  const result = checkGameFinished({
+    game: finishedGame,
+  });
+
+  assert.equal(result.finished, false);
+
+  assert.equal(
+    result.game.status,
+    "playing"
+  );
+
+  assert.deepEqual(
+    result.game.finishOrder,
+    ["user-1"]
+  );
+
+  console.log("✓ 7-player first finisher recorded");
+}
+
+// ============================================================
+//  8-PLAYER FINISH ORDER
+// ============================================================
+
+{
+  const game = createInitialGameState({
+    playerCount: 8,
+    players: players8,
+  });
+
+  const finishedGame = {
+    ...game,
+
+    players: game.players.map((player) => {
+      if (player.userId !== "user-1") {
+        return player;
+      }
+
+      return {
+        ...player,
+
+        coins: player.coins.map((coin) => ({
+          ...coin,
+          area: "finished",
+          progress: 101,
+          absoluteCell: null,
+        })),
+      };
+    }),
+  };
+
+  const result = checkGameFinished({
+    game: finishedGame,
+  });
+
+  assert.equal(result.finished, false);
+
+  assert.equal(
+    result.game.status,
+    "playing"
+  );
+
+  assert.deepEqual(
+    result.game.finishOrder,
+    ["user-1"]
+  );
+
+  console.log("✓ 8-player first finisher recorded");
+}
+
+
+// ============================================================
+//  7-PLAYER GAME ENDS WITH LAST PLAYER
+// ============================================================
+
+{
+  const game = createInitialGameState({
+    playerCount: 7,
+    players: players7,
+  });
+
+  const finishedGame = {
+    ...game,
+
+    finishOrder: [
+      "user-1",
+      "user-2",
+      "user-3",
+      "user-4",
+      "user-5",
+      "user-6",
+    ],
+
+    players: game.players.map((player) => {
+      if (
+        [
+          "user-1",
+          "user-2",
+          "user-3",
+          "user-4",
+          "user-5",
+          "user-6",
+          "user-7",
+        ].includes(player.userId)
+      ) {
+        return {
+          ...player,
+
+          coins: player.coins.map((coin) => ({
+            ...coin,
+            area: "finished",
+            progress: 89,
+            absoluteCell: null,
+          })),
+        };
+      }
+
+      return player;
+    }),
+  };
+
+  const result = checkGameFinished({
+    game: finishedGame,
+  });
+
+  assert.equal(result.finished, true);
+
+  assert.equal(
+    result.game.status,
+    "finished"
+  );
+
+  assert.deepEqual(
+    result.game.finishOrder,
+    [
+      "user-1",
+      "user-2",
+      "user-3",
+      "user-4",
+      "user-5",
+      "user-6",
+      "user-7",
+    ]
+  );
+
+  console.log("✓ 7-player game ends with last player");
+}
+
+// ============================================================
+//  8-PLAYER GAME ENDS WITH LAST PLAYER
+// ============================================================
+
+{
+  const game = createInitialGameState({
+    playerCount: 8,
+    players: players8,
+  });
+
+  const finishedGame = {
+    ...game,
+
+    finishOrder: [
+      "user-1",
+      "user-2",
+      "user-3",
+      "user-4",
+      "user-5",
+      "user-6",
+      "user-7",
+    ],
+
+    players: game.players.map((player) => {
+      if (
+        [
+          "user-1",
+          "user-2",
+          "user-3",
+          "user-4",
+          "user-5",
+          "user-6",
+          "user-7",
+          "user-8",
+        ].includes(player.userId)
+      ) {
+        return {
+          ...player,
+
+          coins: player.coins.map((coin) => ({
+            ...coin,
+            area: "finished",
+            progress: 101,
+            absoluteCell: null,
+          })),
+        };
+      }
+
+      return player;
+    }),
+  };
+
+  const result = checkGameFinished({
+    game: finishedGame,
+  });
+
+  assert.equal(result.finished, true);
+
+  assert.equal(
+    result.game.status,
+    "finished"
+  );
+
+  assert.deepEqual(
+    result.game.finishOrder,
+    [
+      "user-1",
+      "user-2",
+      "user-3",
+      "user-4",
+      "user-5",
+      "user-6",
+      "user-7",
+      "user-8",
+    ]
+  );
+
+  console.log("✓ 8-player game ends with last player");
+}
+
+
+// ============================================================
+//  9-PLAYER GAME IS REJECTED
+// ============================================================
+
+{
+  const players9 = [
+    ...players8,
+    {
+      userId: "user-9",
+      name: "Player 9",
+      color: "lime",
+    },
+  ];
+
+  assert.throws(
+    () => {
+      createInitialGameState({
+        playerCount: 9,
+        players: players9,
+      });
+    },
+    /Player count must be between 2 and 8/
+  );
+
+  console.log("✓ 9-player game rejected");
+}
 
 // ============================================================
 // 37. GAME DOES NOT FINISH WITHOUT WINNER
@@ -1809,7 +2559,7 @@ assert.equal(
 
   assert.equal(
     redCoin.absoluteCell,
-    6
+    45
   );
 
   // ----------------------------------------------------------
@@ -2017,7 +2767,7 @@ assert.equal(
 
   assert.equal(
     redCoin.absoluteCell,
-    7
+    46
   );
 
   // ----------------------------------------------------------
@@ -2223,7 +2973,7 @@ assert.equal(
 
   assert.equal(
     redCoin.absoluteCell,
-    8
+    47
   );
 
   // ----------------------------------------------------------
@@ -2594,7 +3344,7 @@ assert.equal(
 
   assert.equal(
     newRedCoin.absoluteCell,
-    6
+    45
   );
 
   assert.equal(
@@ -2727,7 +3477,7 @@ assert.equal(
 
   assert.equal(
     movedCoin.absoluteCell,
-    16
+    3
   );
 
   // ----------------------------------------------------------

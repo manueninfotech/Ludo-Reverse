@@ -19,7 +19,24 @@ import {
   startTurnTimer,
   clearTurnTimer,
   restartMovementTimer,
+  startLocalTurnTimer,
+  clearLocalTurnTimer,
 } from "../services/game/turnTimer.js";
+
+import {
+  recordCompletedGame,
+} from "../services/stats/userStatsService.js";
+
+import {
+  deductEntryFees,
+} from "../services/coins/coinService.js";
+
+import {
+  createLocalGame,
+  getLocalGame,
+  updateLocalGame,
+  deleteLocalGame,
+} from "../services/local/localGameManager.js";
 
 // ----------------------------------------------------------
 // Register Room Socket Events
@@ -27,13 +44,485 @@ import {
 
 export const registerRoomSocket = (io, socket) => {
 
+  // ----------------------------------------------------------
+// CREATE LOCAL GAME
+// ----------------------------------------------------------
+
+socket.on(
+  "create_local_game",
+  (data, callback) => {
+    const result =
+      createLocalGame({
+        players: data?.players,
+      });
+
+    if (!result.success) {
+      return callback?.({
+        success: false,
+        reason: result.reason,
+      });
+    }
+
+    const {
+      localGame,
+    } = result;
+
+    startLocalTurnTimer({
+      io,
+      gameId: localGame.gameId,
+    });
+    socket.join(
+      localGame.gameId
+    );
+
+    socket.data.localGameId =
+      localGame.gameId;
+
+    callback?.({
+      success: true,
+      localGame,
+    });
+
+    io.to(localGame.gameId).emit(
+      "local_game_created",
+      localGame
+    );
+  }
+);
+
+
+// ----------------------------------------------------------
+// LOCAL GAME - ROLL DICE
+// ----------------------------------------------------------
+
+socket.on(
+  "local_roll_dice",
+  (data, callback) => {
+    const {
+      gameId,
+      playerId,
+    } = data || {};
+
+    const localGame = getLocalGame({
+      gameId,
+    });
+
+    if (!localGame) {
+      return callback?.({
+        success: false,
+        reason: "Local game not found.",
+      });
+    }
+
+    const game = localGame.game;
+
+    if (game.status !== "playing") {
+      return callback?.({
+        success: false,
+        reason: "Game is not playing.",
+      });
+    }
+
+    if (
+      game.currentTurn.playerId !== playerId
+    ) {
+      return callback?.({
+        success: false,
+        reason: "It is not this player's turn.",
+      });
+    }
+
+    const diceValue =
+      Math.floor(Math.random() * 6) + 1;
+
+    const rollResult = rollGameDice({
+      game,
+      playerId,
+      diceValue,
+    });
+
+    if (!rollResult.success) {
+      return callback?.({
+        success: false,
+        reason: rollResult.reason,
+      });
+    }
+
+    let updatedGame = rollResult.game;
+
+    updateLocalGame({
+      gameId,
+      game: updatedGame,
+    });
+
+    const legalMoves = getLegalMoves({
+      game: updatedGame,
+    });
+
+    // ------------------------------------------------------
+    // NO LEGAL MOVE
+    // ------------------------------------------------------
+
+    if (legalMoves.length === 0) {
+      const nextTurnResult = completeGameTurn({
+        game: updatedGame,
+      });
+
+      if (!nextTurnResult.success) {
+        return callback?.({
+          success: false,
+          reason: nextTurnResult.reason,
+        });
+      }
+
+      updatedGame = nextTurnResult.game;
+
+      updateLocalGame({
+        gameId,
+        game: updatedGame,
+      });
+
+      callback?.({
+        success: true,
+        game: updatedGame,
+        diceValue,
+        legalMoves: [],
+        turnPassed: true,
+        reason:
+          "No legal moves. Turn passed to next player.",
+      });
+
+      io.to(gameId).emit(
+        "local_dice_rolled",
+        {
+          game: updatedGame,
+          diceValue,
+          legalMoves: [],
+          turnPassed: true,
+          reason:
+            "No legal moves. Turn passed to next player.",
+        }
+      );
+
+      io.to(gameId).emit(
+        "local_turn_changed",
+        {
+          game: updatedGame,
+          auto: true,
+        }
+      );
+
+      // Start exactly ONE fresh 30-second timer
+      if (updatedGame.status === "playing") {
+        startLocalTurnTimer({
+          io,
+          gameId,
+        });
+      }
+
+      return;
+    }
+
+    // ------------------------------------------------------
+    // NORMAL RESULT
+    // ------------------------------------------------------
+
+    callback?.({
+      success: true,
+      game: updatedGame,
+      diceValue,
+      legalMoves,
+      turnPassed: false,
+    });
+
+    io.to(gameId).emit(
+      "local_dice_rolled",
+      {
+        game: updatedGame,
+        diceValue,
+        legalMoves,
+        turnPassed: false,
+      }
+    );
+  }
+);
+
+// ----------------------------------------------------------
+// LOCAL GAME - MOVE COIN
+// ----------------------------------------------------------
+
+socket.on(
+  "local_move_coin",
+  (data, callback) => {
+    const {
+      gameId,
+      playerId,
+      coinId,
+      direction,
+    } = data || {};
+
+    const localGame = getLocalGame({
+      gameId,
+    });
+
+    if (!localGame) {
+      return callback?.({
+        success: false,
+        reason: "Local game not found.",
+      });
+    }
+
+    const game = localGame.game;
+
+    if (game.status !== "playing") {
+      return callback?.({
+        success: false,
+        reason: "Game is not playing.",
+      });
+    }
+
+    if (
+      game.currentTurn.playerId !== playerId
+    ) {
+      return callback?.({
+        success: false,
+        reason: "It is not this player's turn.",
+      });
+    }
+
+    // ------------------------------------------------------
+    // MOVE COIN
+    // ------------------------------------------------------
+
+    const moveResult = moveCoin({
+      game,
+      playerId,
+      coinId,
+      direction,
+    });
+
+    if (!moveResult.success) {
+      return callback?.({
+        success: false,
+        reason: moveResult.reason,
+      });
+    }
+
+    let updatedGame = moveResult.game;
+
+    // Current timer is no longer valid after the move
+    clearLocalTurnTimer({
+      gameId,
+    });
+
+    // ------------------------------------------------------
+    // CHECK GAME / PLAYER FINISH
+    // ------------------------------------------------------
+
+    const previousFinishCount =
+      updatedGame.finishOrder?.length || 0;
+
+    const finishResult = checkGameFinished({
+      game: updatedGame,
+    });
+
+    updatedGame = finishResult.game;
+
+    const newFinishCount =
+      updatedGame.finishOrder?.length || 0;
+
+    const playerFinished =
+      newFinishCount > previousFinishCount;
+
+    updateLocalGame({
+      gameId,
+      game: updatedGame,
+    });
+
+    // ------------------------------------------------------
+    // GAME FINISHED
+    // ------------------------------------------------------
+
+    if (updatedGame.status === "finished") {
+      callback?.({
+        success: true,
+        game: updatedGame,
+        capture: moveResult.capture,
+        finished: true,
+      });
+
+      io.to(gameId).emit(
+        "local_coin_moved",
+        {
+          game: updatedGame,
+          capture: moveResult.capture,
+        }
+      );
+
+      io.to(gameId).emit(
+        "local_game_finished",
+        {
+          game: updatedGame,
+        }
+      );
+
+      return;
+    }
+
+    // ------------------------------------------------------
+    // PLAYER FINISHED - GAME CONTINUES
+    // ------------------------------------------------------
+
+    if (playerFinished) {
+      callback?.({
+        success: true,
+        game: updatedGame,
+        capture: moveResult.capture,
+      });
+
+      io.to(gameId).emit(
+        "local_coin_moved",
+        {
+          game: updatedGame,
+          capture: moveResult.capture,
+        }
+      );
+
+      io.to(gameId).emit(
+        "local_turn_changed",
+        {
+          game: updatedGame,
+        }
+      );
+
+      startLocalTurnTimer({
+        io,
+        gameId,
+      });
+
+      return;
+    }
+
+    // ------------------------------------------------------
+    // EXTRA TURN
+    // ------------------------------------------------------
+
+    if (
+      updatedGame.currentTurn.extraTurn === true
+    ) {
+      const extraTurnResult =
+        prepareGameExtraTurn({
+          game: updatedGame,
+        });
+
+      if (!extraTurnResult.success) {
+        return callback?.({
+          success: false,
+          reason: extraTurnResult.reason,
+        });
+      }
+
+      updatedGame = extraTurnResult.game;
+
+      updateLocalGame({
+        gameId,
+        game: updatedGame,
+      });
+
+      callback?.({
+        success: true,
+        game: updatedGame,
+        capture: moveResult.capture,
+      });
+
+      io.to(gameId).emit(
+        "local_coin_moved",
+        {
+          game: updatedGame,
+          capture: moveResult.capture,
+        }
+      );
+
+      io.to(gameId).emit(
+        "local_turn_changed",
+        {
+          game: updatedGame,
+        }
+      );
+
+      // Fresh 30-second timer for the extra turn
+      startLocalTurnTimer({
+        io,
+        gameId,
+      });
+
+      return;
+    }
+
+    // ------------------------------------------------------
+    // NORMAL TURN - NEXT PLAYER
+    // ------------------------------------------------------
+
+    const nextTurnResult =
+      completeGameTurn({
+        game: updatedGame,
+      });
+
+    if (!nextTurnResult.success) {
+      return callback?.({
+        success: false,
+        reason: nextTurnResult.reason,
+      });
+    }
+
+    updatedGame = nextTurnResult.game;
+
+    updateLocalGame({
+      gameId,
+      game: updatedGame,
+    });
+
+    callback?.({
+      success: true,
+      game: updatedGame,
+      capture: moveResult.capture,
+    });
+
+    io.to(gameId).emit(
+      "local_coin_moved",
+      {
+        game: updatedGame,
+        capture: moveResult.capture,
+      }
+    );
+
+    io.to(gameId).emit(
+      "local_turn_changed",
+      {
+        game: updatedGame,
+      }
+    );
+
+    // Fresh 30-second timer for next player
+    if (updatedGame.status === "playing") {
+      startLocalTurnTimer({
+        io,
+        gameId,
+      });
+    }
+  }
+);
+
   // --------------------------------------------------------
   // CREATE ROOM
   // --------------------------------------------------------
 
   socket.on("create_room", (data, callback) => {
 
-    const result = createRoom(data);
+    const result = createRoom({
+  ...data,
+  hostId: socket.data.userId,
+});
 
     if (!result.success) {
       return callback?.({
@@ -47,9 +536,9 @@ export const registerRoomSocket = (io, socket) => {
     // Join Socket.IO room
     socket.join(room.roomId);
 
+
     // Store player information on socket
     socket.data.roomId = room.roomId;
-    socket.data.userId = data.hostId;
 
     callback?.({
       success: true,
@@ -70,7 +559,10 @@ export const registerRoomSocket = (io, socket) => {
 
   socket.on("join_room", (data, callback) => {
 
-    const result = joinRoom(data);
+    const result = joinRoom({
+      ...data,
+      userId: socket.data.userId,
+    });
 
     if (!result.success) {
       return callback?.({
@@ -83,10 +575,10 @@ export const registerRoomSocket = (io, socket) => {
 
     // Join Socket.IO room
     socket.join(room.roomId);
+    
 
     // Store player information on socket
     socket.data.roomId = room.roomId;
-    socket.data.userId = data.userId;
 
     callback?.({
       success: true,
@@ -216,14 +708,70 @@ socket.on("resume_room", (data, callback) => {
 
 
   // --------------------------------------------------------
-  // START GAME
-  // --------------------------------------------------------
+// START GAME
+// --------------------------------------------------------
 
-  socket.on("start_game", (data, callback) => {
+socket.on("start_game", async (data, callback) => {
+  try {
+    // --------------------------------------------------------
+    // GET ROOM BEFORE STARTING THE GAME
+    // --------------------------------------------------------
+
+    const room = getRoom({
+      roomId: data.roomId,
+    });
+
+    if (!room) {
+      return callback?.({
+        success: false,
+        reason: "Room not found.",
+      });
+    }
+
+    // --------------------------------------------------------
+    // GET ALL PLAYERS
+    // --------------------------------------------------------
+
+    const playerIds = room.players.map(
+      (player) => player.userId
+    );
+
+    if (playerIds.length === 0) {
+      return callback?.({
+        success: false,
+        reason: "No players in the room.",
+      });
+    }
+
+    // --------------------------------------------------------
+    // DEDUCT ENTRY FEE
+    // --------------------------------------------------------
+
+    try {
+      await deductEntryFees(playerIds);
+
+      console.log(
+        `Entry fee deducted from ${playerIds.length} players in room ${room.roomId}`
+      );
+    } catch (error) {
+      console.error(
+        "Failed to deduct game entry fee:",
+        error
+      );
+
+      return callback?.({
+        success: false,
+        reason: error.message,
+      });
+    }
+
+    // --------------------------------------------------------
+    // START GAME
+    // --------------------------------------------------------
 
     const result = startGame({
       roomId: data.roomId,
-      userId: data.userId,
+      userId: socket.data.userId,
     });
 
     if (!result.success) {
@@ -233,27 +781,64 @@ socket.on("resume_room", (data, callback) => {
       });
     }
 
-    const room = result.room;
+    const startedRoom = result.room;
+
+    // --------------------------------------------------------
+    // INITIALIZE TEMPORARY GAME STATISTICS
+    // --------------------------------------------------------
+
+    startedRoom.game.statsTracking = {
+      finalized: false,
+      players: {},
+    };
+
+    startedRoom.game.players.forEach((player) => {
+      startedRoom.game.statsTracking.players[
+        player.userId
+      ] = {
+        kills: 0,
+        tokensCaptured: 0,
+      };
+    });
+
+    // --------------------------------------------------------
+    // SEND START GAME RESPONSE
+    // --------------------------------------------------------
 
     callback?.({
       success: true,
-      room,
+      room: startedRoom,
     });
 
-    io.to(room.roomId).emit("game_started", room);
-
     // Notify all players
+    io.to(startedRoom.roomId).emit(
+      "game_started",
+      startedRoom
+    );
+
+    // Start first player's timer
     startTurnTimer({
-  io,
-  room,
+      io,
+      room: startedRoom,
+    });
+  } catch (error) {
+    console.error(
+      "Start game error:",
+      error
+    );
+
+    callback?.({
+      success: false,
+      reason: "Failed to start the game.",
+    });
+  }
 });
-  });
 
     // --------------------------------------------------------
 // ROLL DICE
 // --------------------------------------------------------
 
-socket.on("roll_dice", (data, callback) => {
+socket.on("roll_dice", async (data, callback) => {
 
   const { roomId, diceValue } = data;
   const userId = socket.data.userId;
@@ -291,9 +876,9 @@ socket.on("roll_dice", (data, callback) => {
   }
 
   // Update room game state
-  room.game = result.game;
+room.game = result.game;
 
-  const finishResult = checkGameFinished({
+const finishResult = checkGameFinished({
   game: room.game,
 });
 
@@ -407,7 +992,7 @@ if (finishResult.finished) {
 // MOVE COIN
 // --------------------------------------------------------
 
-socket.on("move_coin", (data, callback) => {
+socket.on("move_coin", async (data, callback) => {
 
   const {
   roomId,
@@ -451,12 +1036,87 @@ const userId = socket.data.userId;
   }
 
   // Update room game state
-  room.game = result.game;
+room.game = result.game;
 
-  // The current timer is no longer needed
-  clearTurnTimer({
-    roomId,
+// ------------------------------------------------------
+// TRACK TEMPORARY GAME STATISTICS
+// ------------------------------------------------------
+
+const killedCoins =
+  result.capture?.killedCoins || [];
+
+const killsThisMove =
+  killedCoins.length;
+
+// Make sure stats tracking exists
+if (!room.game.statsTracking) {
+  room.game.statsTracking = {
+    finalized: false,
+    players: {},
+  };
+}
+
+// Make sure every player has a stats object
+room.game.players.forEach((player) => {
+  if (!room.game.statsTracking.players[player.userId]) {
+    room.game.statsTracking.players[player.userId] = {
+      kills: 0,
+      tokensCaptured: 0,
+    };
+  }
+});
+
+// ------------------------------------------------------
+// MOVING PLAYER KILLED OPPONENT TOKENS
+// ------------------------------------------------------
+
+if (killsThisMove > 0) {
+  room.game.statsTracking.players[userId].kills +=
+    killsThisMove;
+
+  // Every killed token belongs to the opponent.
+  // Increase that opponent's captured-token count.
+  killedCoins.forEach((killedCoin) => {
+    const killedPlayerId =
+      killedCoin.playerId;
+
+    if (
+      killedPlayerId &&
+      room.game.statsTracking.players[killedPlayerId]
+    ) {
+      room.game.statsTracking.players[
+        killedPlayerId
+      ].tokensCaptured += 1;
+    }
   });
+}
+
+// Check whether this move finished the game
+// ------------------------------------------------------
+// CHECK PLAYER FINISH
+// ------------------------------------------------------
+
+const previousFinishCount =
+  room.game.finishOrder?.length || 0;
+
+const finishResult =
+  checkGameFinished({
+    game: room.game,
+  });
+
+room.game = finishResult.game;
+
+const newFinishCount =
+  room.game.finishOrder?.length || 0;
+
+const playerFinished =
+  newFinishCount >
+  previousFinishCount;
+
+// The current timer is no longer needed
+clearTurnTimer({
+  roomId,
+});
 
   // ------------------------------------------------------
   // SEND RESPONSE TO PLAYER
@@ -481,17 +1141,54 @@ const userId = socket.data.userId;
   });
 
   // ------------------------------------------------------
-  // GAME FINISHED
-  // ------------------------------------------------------
+// GAME FINISHED
+// ------------------------------------------------------
 
-  if (room.game.status === "finished") {
+if (room.game.status === "finished") {
+  const winner = room.game.players.find(
+    (player) =>
+      player.userId === room.game.winnerId
+  );
 
-    io.to(roomId).emit("game_finished", {
+  let completedStats = {};
+
+  try {
+    completedStats = await recordCompletedGame({
       game: room.game,
+      result: "normal",
     });
-
-    return;
+  } catch (error) {
+    console.error(
+      "Failed to record completed game statistics:",
+      error
+    );
   }
+
+  io.to(roomId).emit("game_finished", {
+    game: room.game,
+    winner: winner || null,
+    stats: completedStats,
+  });
+
+  return;
+}
+
+// ------------------------------------------------------
+// PLAYER FINISHED - GAME CONTINUES
+// ------------------------------------------------------
+
+if (playerFinished) {
+  io.to(roomId).emit("turn_changed", {
+    game: room.game,
+  });
+
+  startTurnTimer({
+    io,
+    room,
+  });
+
+  return;
+}
 
   // ------------------------------------------------------
   // EXTRA TURN
@@ -561,7 +1258,7 @@ const userId = socket.data.userId;
 
     const result = leaveRoom({
       roomId: data.roomId,
-      userId: data.userId,
+      userId: socket.data.userId,
     });
 
     if (!result.success) {
@@ -594,7 +1291,18 @@ const userId = socket.data.userId;
   // SOCKET DISCONNECT
   // --------------------------------------------------------
 
-  socket.on("disconnect", () => {
+  socket.on("disconnect", async () => {
+    if (socket.data.localGameId) {
+  clearLocalTurnTimer({
+    gameId: socket.data.localGameId,
+  });
+
+  deleteLocalGame({
+    gameId: socket.data.localGameId,
+  });
+
+  socket.data.localGameId = null;
+}
     const roomId = socket.data.roomId;
     const userId = socket.data.userId;
 
@@ -680,6 +1388,19 @@ if (
       turnExpiresAt: null,
     },
   };
+
+  try {
+  await recordCompletedGame({
+    game: room.game,
+    result: "disconnected",
+  });
+} catch (error) {
+  console.error(
+    "Failed to record disconnected game statistics:",
+    error
+  );
+}
+  
 
   io.to(roomId).emit("game_finished", {
     game: room.game,

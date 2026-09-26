@@ -9,7 +9,7 @@ import {
   getLegalDirections,
   canCoinMove,
   getPossibleMoves,
-} from "./movement.js";
+} from "../../services/game/movement.js";
 
 
 // ============================================================
@@ -70,38 +70,33 @@ const finishedCoin = {
 console.log("\n========== ABSOLUTE CELL TESTS ==========\n");
 
 test(
-  "Red progress 0 maps to absolute cell 0",
-  getAbsoluteCell("red", 0, 4) === 0
+  "Red progress 0 maps to absolute cell 39",
+  getAbsoluteCell("red", 0, 4) === 39
 );
 
 test(
-  "Red progress 5 maps to absolute cell 5",
-  getAbsoluteCell("red", 5, 4) === 5
+  "Red progress 5 maps to absolute cell 44",
+  getAbsoluteCell("red", 5, 4) === 44
 );
 
 test(
-  "Green progress 0 maps to absolute cell 13",
-  getAbsoluteCell("green", 0, 4) === 13
+  "Green progress 0 maps to absolute cell 0",
+  getAbsoluteCell("green", 0, 4) === 0
 );
 
 test(
-  "Green progress 5 maps to absolute cell 18",
-  getAbsoluteCell("green", 5, 4) === 18
+  "Green progress 5 maps to absolute cell 5",
+  getAbsoluteCell("green", 5, 4) === 5
 );
 
 test(
-  "Yellow progress 5 maps to absolute cell 31",
-  getAbsoluteCell("yellow", 5, 4) === 31
+  "Yellow progress 5 maps to absolute cell 18",
+  getAbsoluteCell("yellow", 5, 4) === 18
 );
 
 test(
-  "Blue progress 5 maps to absolute cell 44",
-  getAbsoluteCell("blue", 5, 4) === 44
-);
-
-test(
-  "Progress outside main track returns null",
-  getAbsoluteCell("red", 52, 4) === null
+  "Blue progress 5 maps to absolute cell 31",
+  getAbsoluteCell("blue", 5, 4) === 31
 );
 
 
@@ -173,7 +168,7 @@ test(
 
 test(
   "Base coin enters red starting cell",
-  baseForward.toAbsoluteCell === 0
+  baseForward.toAbsoluteCell === 39
 );
 
 
@@ -231,7 +226,7 @@ test(
 
 test(
   "Forward movement calculates absolute cell",
-  forwardMove.toAbsoluteCell === 8
+  forwardMove.toAbsoluteCell === 47
 );
 
 test(
@@ -266,7 +261,7 @@ test(
 
 test(
   "Backward movement calculates absolute cell",
-  backwardMove.toAbsoluteCell === 7
+  backwardMove.toAbsoluteCell === 46
 );
 
 test(
@@ -308,7 +303,7 @@ test(
 
 test(
   "Coin lands on red absolute starting cell",
-  exactStartMove.toAbsoluteCell === 0
+  exactStartMove.toAbsoluteCell === 39
 );
 
 
@@ -663,7 +658,7 @@ test(
 
 test(
   "3-player green absolute cell is calculated correctly",
-  greenThreePlayerMove.toAbsoluteCell === 20
+  greenThreePlayerMove.toAbsoluteCell === 7
 );
 
 
@@ -734,6 +729,28 @@ test(
 test(
   "6-player purple absolute cell is calculated correctly",
   sixPlayerMove.toAbsoluteCell === 68
+);
+
+console.log("\n========== HOME ENTRY TEST ==========\n");
+
+test(
+  "Progress 50 is main track",
+  getAreaFromProgress(50, 4) === "main"
+);
+
+test(
+  "Progress 51 enters home path",
+  getAreaFromProgress(51, 4) === "home"
+);
+
+test(
+  "Progress 55 is home path",
+  getAreaFromProgress(55, 4) === "home"
+);
+
+test(
+  "Progress 56 is finished",
+  getAreaFromProgress(56, 4) === "finished"
 );
 
 

@@ -22,7 +22,7 @@ import {
   canRollDice,
   canMoveCoin,
   canMoveBackward,
-} from "./turn.js";
+} from "../../services/game/turn.js";
 
 console.log("Running turn tests...\n");
 

@@ -53,20 +53,20 @@ const STANDARD_BOARD = {
 
   // Starting cell of each player
   startCells: {
-  red: 0,
-  green: 13,
-  yellow: 39,
+  green: 0,
+  yellow: 13,
   blue: 26,
+  red: 39,
 },
 
 
   // Last shared-track cell before entering
   // the player's private home path
   homeEntryCells: {
-  red: 50,
-  green: 11,
-  yellow: 37,
+  green: 50,
+  yellow: 11,
   blue: 24,
+  red: 37,
 },
 
   // Standard Ludo safe/star cells
@@ -248,6 +248,153 @@ const SIX_PLAYER_BOARD = {
 
 
 // ============================================================
+// 7-PLAYER BOARD
+// ============================================================
+//
+// Board layout:
+// Red -> Green -> Orange -> Blue -> Yellow -> Purple -> Pink
+//
+// Main track:
+// 84 cells
+// 0 - 83
+//
+// Each player gets:
+// 1 starting cell
+// 1 home entry
+// 5 home cells
+// 4 coins
+// ============================================================
+
+const SEVEN_PLAYER_BOARD = {
+  type: "seven-player",
+
+  trackSize: 84,
+
+  colors: [
+    "red",
+    "green",
+    "orange",
+    "blue",
+    "yellow",
+    "purple",
+    "pink",
+  ],
+
+  startCells: {
+    red: 0,
+    green: 12,
+    orange: 24,
+    blue: 36,
+    yellow: 48,
+    purple: 60,
+    pink: 72,
+  },
+
+  homeEntryCells: {
+    red: 83,
+    green: 11,
+    orange: 23,
+    blue: 35,
+    yellow: 47,
+    purple: 59,
+    pink: 71,
+  },
+
+  safeCells: [
+    0,
+    12,
+    24,
+    36,
+    48,
+    60,
+    72,
+  ],
+
+  homePathSize: 5,
+
+  finishPosition: 89,
+
+  coinsPerPlayer: 4,
+};
+
+
+// ============================================================
+// 8-PLAYER BOARD
+// ============================================================
+//
+// Board layout:
+// Red -> Green -> Orange -> Blue -> Yellow -> Purple
+// -> Pink -> Cyan
+//
+// Main track:
+// 96 cells
+// 0 - 95
+//
+// Each player gets:
+// 1 starting cell
+// 1 home entry
+// 5 home cells
+// 4 coins
+// ============================================================
+
+const EIGHT_PLAYER_BOARD = {
+  type: "eight-player",
+
+  trackSize: 96,
+
+  colors: [
+    "red",
+    "green",
+    "orange",
+    "blue",
+    "yellow",
+    "purple",
+    "pink",
+    "cyan",
+  ],
+
+  startCells: {
+    red: 0,
+    green: 12,
+    orange: 24,
+    blue: 36,
+    yellow: 48,
+    purple: 60,
+    pink: 72,
+    cyan: 84,
+  },
+
+  homeEntryCells: {
+    red: 95,
+    green: 11,
+    orange: 23,
+    blue: 35,
+    yellow: 47,
+    purple: 59,
+    pink: 71,
+    cyan: 83,
+  },
+
+  safeCells: [
+    0,
+    12,
+    24,
+    36,
+    48,
+    60,
+    72,
+    84,
+  ],
+
+  homePathSize: 5,
+
+  finishPosition: 101,
+
+  coinsPerPlayer: 4,
+};
+
+
+// ============================================================
 // BOARD TYPE MAPPING
 // ============================================================
 //
@@ -264,6 +411,8 @@ const BOARD_TYPES = {
   4: "standard-4",
   5: "five-player",
   6: "six-player",
+  7: "seven-player",
+  8: "eight-player",
 };
 
 
@@ -296,6 +445,12 @@ export const getBoardConfig = (playerCount) => {
 
     case "six-player":
       return SIX_PLAYER_BOARD;
+
+    case "seven-player":
+      return SEVEN_PLAYER_BOARD;
+
+    case "eight-player":
+      return EIGHT_PLAYER_BOARD;
 
     default:
       return null;
@@ -392,5 +547,7 @@ export {
   STANDARD_BOARD,
   FIVE_PLAYER_BOARD,
   SIX_PLAYER_BOARD,
+  SEVEN_PLAYER_BOARD,
+  EIGHT_PLAYER_BOARD,
   BOARD_TYPES,
 };

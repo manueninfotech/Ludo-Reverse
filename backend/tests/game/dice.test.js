@@ -24,7 +24,7 @@ import {
   rollDiceResult,
   getExtraTurnReason,
   getDiceRules,
-} from "./dice.js";
+} from "../../services/game/dice.js";
 
 
 // ============================================================

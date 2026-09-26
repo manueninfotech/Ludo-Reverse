@@ -8,7 +8,7 @@ import {
   getPlayerBoardInfo,
   isSafeCell,
   isValidColor,
-} from "./boardConfig.js";
+} from "../../services/game/boardConfig.js";
 
 
 // ============================================================
