@@ -59,15 +59,7 @@ export const getMyProfile = async (req, res) => {
         coins: req.user.coins ?? 0,
       },
 
-      stats: {
-        gamesPlayed: stats.gamesPlayed || 0,
-        gamesWon: stats.gamesWon || 0,
-        gamesLost: stats.gamesLost || 0,
-        currentWinStreak: stats.currentWinStreak || 0,
-        totalKills: stats.totalKills || 0,
-        totalTokensCaptured:
-          stats.totalTokensCaptured || 0,
-      },
+      stats: getStatsData(stats),
     });
   } catch (error) {
     console.error("Get profile error:", error);
