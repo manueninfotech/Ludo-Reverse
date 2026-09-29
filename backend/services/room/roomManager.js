@@ -20,7 +20,7 @@ const PLAYER_COLORS = {
 
   7: ["red", "green", "orange", "blue", "yellow", "purple", "pink",],
 
-  8: ["red", "green", "orange", "blue", "yellow", "purple", "pink", "cyan",],
+  8: ["red", "green", "orange", "blue", "yellow", "purple", "pink", "white"],
 };
 
 

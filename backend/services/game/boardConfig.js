@@ -350,6 +350,7 @@ const EIGHT_PLAYER_BOARD = {
     "yellow",
     "purple",
     "pink",
+    "white",
     "cyan",
   ],
 
@@ -361,6 +362,7 @@ const EIGHT_PLAYER_BOARD = {
     yellow: 48,
     purple: 60,
     pink: 72,
+    white: 84,
     cyan: 84,
   },
 
@@ -372,6 +374,7 @@ const EIGHT_PLAYER_BOARD = {
     yellow: 47,
     purple: 59,
     pink: 71,
+    white: 83,
     cyan: 83,
   },
 

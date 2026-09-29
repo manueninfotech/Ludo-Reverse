@@ -55,6 +55,48 @@ const userStatsSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+
+    // Total forward moves
+    totalForwardMoves: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    // Total backward moves
+    totalBackwardMoves: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    // Total dice rolls of six
+    totalSixes: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    // Total tokens brought safely into center home
+    totalCoinsFinished: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    // Total overall moves
+    totalMoves: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    // Longest win streak ever reached
+    longestWinStreak: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
   },
   {
     timestamps: {

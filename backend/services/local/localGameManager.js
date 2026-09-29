@@ -68,7 +68,7 @@ const PLAYER_COLORS = {
     "yellow",
     "purple",
     "pink",
-    "cyan",
+    "white",
   ],
 };
 

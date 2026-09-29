@@ -425,7 +425,7 @@ let roomId;
       "yellow",
       "purple",
       "pink",
-      "cyan",
+      "white",
     ]
   );
 
