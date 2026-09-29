@@ -68,6 +68,17 @@ const userSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+
+    settings: {
+      sfxEnabled: { type: Boolean, default: true },
+      sfxVolume: { type: Number, default: 0.85, min: 0, max: 1 },
+      musicEnabled: { type: Boolean, default: true },
+      musicVolume: { type: Number, default: 0.70, min: 0, max: 1 },
+      hapticFeedback: { type: Boolean, default: true },
+      confirmDirection: { type: Boolean, default: true },
+      highlightLegalMoves: { type: Boolean, default: true },
+      autoSelectSingleMove: { type: Boolean, default: false },
+    },
   },
   {
     timestamps: true,

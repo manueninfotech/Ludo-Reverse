@@ -12,6 +12,16 @@ const getUserData = (user) => ({
   avatar: user.avatar,
   isEmailVerified: user.isEmailVerified,
   status: user.status,
+  settings: user.settings || {
+    sfxEnabled: true,
+    sfxVolume: 0.85,
+    musicEnabled: true,
+    musicVolume: 0.70,
+    hapticFeedback: true,
+    confirmDirection: true,
+    highlightLegalMoves: true,
+    autoSelectSingleMove: false,
+  },
   lastLoginAt: user.lastLoginAt,
   createdAt: user.createdAt,
   updatedAt: user.updatedAt,
@@ -157,6 +167,53 @@ export const updateMyProfile = async (req, res) => {
   } catch (error) {
     console.error("Update profile error:", error);
 
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error.",
+    });
+  }
+};
+
+// ============================================================
+// UPDATE MY SETTINGS
+// PUT /api/users/settings
+// ============================================================
+
+export const updateMySettings = async (req, res) => {
+  try {
+    const {
+      sfxEnabled,
+      sfxVolume,
+      musicEnabled,
+      musicVolume,
+      hapticFeedback,
+      confirmDirection,
+      highlightLegalMoves,
+      autoSelectSingleMove,
+    } = req.body;
+
+    if (!req.user.settings) {
+      req.user.settings = {};
+    }
+
+    if (typeof sfxEnabled === "boolean") req.user.settings.sfxEnabled = sfxEnabled;
+    if (typeof sfxVolume === "number") req.user.settings.sfxVolume = Math.max(0, Math.min(1, sfxVolume));
+    if (typeof musicEnabled === "boolean") req.user.settings.musicEnabled = musicEnabled;
+    if (typeof musicVolume === "number") req.user.settings.musicVolume = Math.max(0, Math.min(1, musicVolume));
+    if (typeof hapticFeedback === "boolean") req.user.settings.hapticFeedback = hapticFeedback;
+    if (typeof confirmDirection === "boolean") req.user.settings.confirmDirection = confirmDirection;
+    if (typeof highlightLegalMoves === "boolean") req.user.settings.highlightLegalMoves = highlightLegalMoves;
+    if (typeof autoSelectSingleMove === "boolean") req.user.settings.autoSelectSingleMove = autoSelectSingleMove;
+
+    await req.user.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Settings updated successfully.",
+      settings: req.user.settings,
+    });
+  } catch (error) {
+    console.error("Update settings error:", error);
     return res.status(500).json({
       success: false,
       message: "Internal server error.",

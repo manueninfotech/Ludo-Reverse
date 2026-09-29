@@ -3,6 +3,7 @@ import express from "express";
 import {
   getMyProfile,
   updateMyProfile,
+  updateMySettings,
 } from "../controllers/userController.js";
 
 import { requireAuth } from "../middleware/authMiddleware.js";
@@ -19,6 +20,12 @@ router.patch(
   "/me",
   requireAuth,
   updateMyProfile
+);
+
+router.put(
+  "/settings",
+  requireAuth,
+  updateMySettings
 );
 
 export default router;
