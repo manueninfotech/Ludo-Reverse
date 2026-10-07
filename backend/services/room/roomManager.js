@@ -84,6 +84,7 @@ export const createRoom = ({
   hostId,
   hostName,
   maxPlayers = 2,
+  color,
 }) => {
 
   if (![2, 3, 4, 5, 6, 7, 8].includes(maxPlayers)) {
@@ -102,9 +103,12 @@ export const createRoom = ({
 
   const roomId = createUniqueRoomCode();
 
-  // First player always gets the first color.
+  // Use chosen color if valid for this player count, otherwise first color
+  const availableColors = PLAYER_COLORS[maxPlayers] || [];
   const hostColor =
-    PLAYER_COLORS[maxPlayers][0];
+    (color && availableColors.includes(color.toLowerCase()))
+      ? color.toLowerCase()
+      : availableColors[0];
 
   const host = {
     userId: hostId,

@@ -4,6 +4,8 @@ import {
   getMyProfile,
   updateMyProfile,
   updateMySettings,
+  getMyMatchHistory,
+  recordUserMatch,
 } from "../controllers/userController.js";
 
 import { requireAuth } from "../middleware/authMiddleware.js";
@@ -26,6 +28,18 @@ router.put(
   "/settings",
   requireAuth,
   updateMySettings
+);
+
+router.get(
+  "/matches",
+  requireAuth,
+  getMyMatchHistory
+);
+
+router.post(
+  "/matches",
+  requireAuth,
+  recordUserMatch
 );
 
 export default router;

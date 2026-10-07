@@ -1,4 +1,5 @@
 import UserStats from "../../models/UserStats.js";
+import MatchRecord from "../../models/MatchRecord.js";
 
 import {
   getCoinRewardForPosition,
@@ -283,6 +284,24 @@ export const recordCompletedGame = async ({
 
       const updatedStats =
         await getUserStats(userId);
+
+      // ------------------------------------------------------
+      // MATCH RECORD LOG
+      // ------------------------------------------------------
+      try {
+        await MatchRecord.create({
+          userId,
+          result: playerResult === "won" ? "WIN" : "LOSS",
+          gameType: `${game.players.length}-Player Online Match`,
+          score: coinsEarned > 0 ? `+${coinsEarned} Coins` : "+0 Coins",
+          coinsAwarded: coinsEarned,
+          isWin: playerResult === "won",
+          roomId: game.roomId || null,
+          playedAt: new Date(),
+        });
+      } catch (err) {
+        console.error(`[STATS] Failed to create MatchRecord for ${userId}:`, err);
+      }
 
       completedStats[userId] = {
         result: playerResult,

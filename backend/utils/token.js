@@ -1,5 +1,6 @@
 import "dotenv/config";
 import jwt from "jsonwebtoken";
+import crypto from "crypto";
 
 const ACCESS_SECRET =
   process.env.JWT_ACCESS_SECRET;
@@ -30,6 +31,7 @@ export const generateAccessToken = ({ userId }) =>
     {
       userId,
       type: "access",
+      jti: crypto.randomUUID(),
     },
     ACCESS_SECRET,
     {
@@ -42,6 +44,7 @@ export const generateRefreshToken = ({ userId }) =>
     {
       userId,
       type: "refresh",
+      jti: crypto.randomUUID(),
     },
     REFRESH_SECRET,
     {

@@ -123,12 +123,43 @@ export const signup = async (req, res) => {
     });
 
     // -----------------------------
-    // Safe response
+    // Generate auth tokens
+    // -----------------------------
+
+    const accessToken = generateAccessToken({
+      userId: user.userId,
+    });
+
+    const refreshToken = generateRefreshToken({
+      userId: user.userId,
+    });
+
+    const refreshTokenHash = hashRefreshToken(refreshToken);
+
+    const refreshTokenPayload = JSON.parse(
+      Buffer.from(refreshToken.split(".")[1], "base64").toString("utf8")
+    );
+
+    await RefreshToken.findOneAndUpdate(
+      { tokenHash: refreshTokenHash },
+      {
+        userId: user.userId,
+        tokenHash: refreshTokenHash,
+        expiresAt: new Date(refreshTokenPayload.exp * 1000),
+        revokedAt: null,
+      },
+      { upsert: true, returnDocument: "after", setDefaultsOnInsert: true }
+    );
+
+    // -----------------------------
+    // Safe response with tokens
     // -----------------------------
 
     return res.status(201).json({
       success: true,
       message: "Account created successfully.",
+      accessToken,
+      refreshToken,
       user: {
         userId: user.userId,
         username: user.username,
@@ -267,13 +298,18 @@ export const login = async (req, res) => {
         ).toString("utf8")
     );
 
-    await RefreshToken.create({
-    userId: user.userId,
-    tokenHash: refreshTokenHash,
-    expiresAt: new Date(
-        refreshTokenPayload.exp * 1000
-    ),
-    });
+    await RefreshToken.findOneAndUpdate(
+      { tokenHash: refreshTokenHash },
+      {
+        userId: user.userId,
+        tokenHash: refreshTokenHash,
+        expiresAt: new Date(
+          refreshTokenPayload.exp * 1000
+        ),
+        revokedAt: null,
+      },
+      { upsert: true, returnDocument: "after", setDefaultsOnInsert: true }
+    );
 
     // -----------------------------
     // Return authentication data
@@ -401,11 +437,16 @@ export const refreshToken = async (req, res) => {
       ).toString("utf8")
     );
 
-    await RefreshToken.create({
-      userId: user.userId,
-      tokenHash: newRefreshTokenHash,
-      expiresAt: new Date(newRefreshTokenPayload.exp * 1000),
-    });
+    await RefreshToken.findOneAndUpdate(
+      { tokenHash: newRefreshTokenHash },
+      {
+        userId: user.userId,
+        tokenHash: newRefreshTokenHash,
+        expiresAt: new Date(newRefreshTokenPayload.exp * 1000),
+        revokedAt: null,
+      },
+      { upsert: true, returnDocument: "after", setDefaultsOnInsert: true }
+    );
 
     return res.status(200).json({
       success: true,
@@ -467,25 +508,56 @@ export const logout = async (req, res) => {
 
 export const googleLogin = async (req, res) => {
   try {
-    const { idToken } = req.body;
+    const { idToken, accessToken: googleAccessToken } = req.body;
 
-    if (!idToken) {
+    if (!idToken && !googleAccessToken) {
       return res.status(400).json({
         success: false,
-        message: "Google ID token is required.",
+        message: "Google ID token or access token is required.",
       });
     }
 
     let payload;
 
-    try {
-      const ticket = await googleClient.verifyIdToken({
-        idToken,
-        audience: process.env.GOOGLE_CLIENT_ID,
-      });
+    const validAudiences = [
+      process.env.GOOGLE_CLIENT_ID,
+      "699594613448-hgokrrpdi05f058574lsfdsdesb589j1.apps.googleusercontent.com",
+      "699594613448-n77nq7n8sp97m84hm72vnmg4smn853v2.apps.googleusercontent.com",
+    ].filter(Boolean);
 
-      payload = ticket.getPayload();
-    } catch (error) {
+    if (idToken) {
+      try {
+        const ticket = await googleClient.verifyIdToken({
+          idToken,
+          audience: validAudiences,
+        });
+
+        payload = ticket.getPayload();
+      } catch (error) {
+        console.error("Google verifyIdToken error:", error.message);
+      }
+    }
+
+    // Fallback: If idToken verification failed or mobile sent accessToken
+    if (!payload && googleAccessToken) {
+      try {
+        const userInfoRes = await fetch(
+          "https://www.googleapis.com/oauth2/v3/userinfo",
+          {
+            headers: { Authorization: `Bearer ${googleAccessToken}` },
+          }
+        );
+        if (userInfoRes.ok) {
+          payload = await userInfoRes.json();
+        } else {
+          console.error("Google userinfo HTTP status:", userInfoRes.status);
+        }
+      } catch (err) {
+        console.error("Google userinfo fetch error:", err.message);
+      }
+    }
+
+    if (!payload) {
       return res.status(401).json({
         success: false,
         message: "Invalid Google ID token.",
@@ -609,11 +681,16 @@ export const googleLogin = async (req, res) => {
       ).toString("utf8")
     );
 
-    await RefreshToken.create({
-      userId: user.userId,
-      tokenHash: refreshTokenHash,
-      expiresAt: new Date(refreshTokenPayload.exp * 1000),
-    });
+    await RefreshToken.findOneAndUpdate(
+      { tokenHash: refreshTokenHash },
+      {
+        userId: user.userId,
+        tokenHash: refreshTokenHash,
+        expiresAt: new Date(refreshTokenPayload.exp * 1000),
+        revokedAt: null,
+      },
+      { upsert: true, returnDocument: "after", setDefaultsOnInsert: true }
+    );
 
     return res.status(200).json({
       success: true,
@@ -626,6 +703,7 @@ export const googleLogin = async (req, res) => {
         email: user.email,
         displayName: user.displayName,
         avatar: user.avatar,
+        coins: user.coins,
         status: user.status,
         lastLoginAt: user.lastLoginAt,
       },

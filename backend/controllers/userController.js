@@ -1,4 +1,5 @@
 import { getOrCreateUserStats } from "../services/stats/userStatsService.js";
+import MatchRecord from "../models/MatchRecord.js";
 
 // ============================================================
 // USER RESPONSE
@@ -220,3 +221,81 @@ export const updateMySettings = async (req, res) => {
     });
   }
 };
+
+// ============================================================
+// GET MATCH HISTORY
+// GET /api/users/matches
+// ============================================================
+
+export const getMyMatchHistory = async (req, res) => {
+  try {
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 20));
+    const matches = await MatchRecord.find({ userId: req.user.userId })
+      .sort({ playedAt: -1 })
+      .limit(limit)
+      .lean();
+
+    const formatted = matches.map((m) => ({
+      id: m._id.toString(),
+      result: m.result,
+      gameType: m.gameType,
+      score: m.score,
+      coinsAwarded: m.coinsAwarded,
+      isWin: m.isWin,
+      playedAt: m.playedAt,
+    }));
+
+    return res.status(200).json({
+      success: true,
+      matches: formatted,
+    });
+  } catch (error) {
+    console.error("Get match history error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error.",
+    });
+  }
+};
+
+// ============================================================
+// RECORD USER MATCH
+// POST /api/users/matches
+// ============================================================
+
+export const recordUserMatch = async (req, res) => {
+  try {
+    const { result, gameType, score, coinsAwarded, isWin, playedAt, roomId } = req.body;
+
+    const match = await MatchRecord.create({
+      userId: req.user.userId,
+      result: result === "WIN" ? "WIN" : "LOSS",
+      gameType: typeof gameType === "string" ? gameType.trim() : "Classic Match",
+      score: typeof score === "string" ? score : "+0 Coins",
+      coinsAwarded: typeof coinsAwarded === "number" ? coinsAwarded : 0,
+      isWin: Boolean(isWin),
+      roomId: typeof roomId === "string" ? roomId : null,
+      playedAt: playedAt ? new Date(playedAt) : new Date(),
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: "Match recorded successfully.",
+      match: {
+        id: match._id.toString(),
+        result: match.result,
+        gameType: match.gameType,
+        score: match.score,
+        coinsAwarded: match.coinsAwarded,
+        isWin: match.isWin,
+        playedAt: match.playedAt,
+      },
+    });
+  } catch (error) {
+    console.error("Record match error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error.",
+    });
+  }
+};
