@@ -527,10 +527,13 @@ export const googleLogin = async (req, res) => {
 
     let payload;
 
+    const envAudiences = process.env.GOOGLE_CLIENT_IDS
+      ? process.env.GOOGLE_CLIENT_IDS.split(",").map((id) => id.trim())
+      : [];
+
     const validAudiences = [
       process.env.GOOGLE_CLIENT_ID,
-      "699594613448-hgokrrpdi05f058574lsfdsdesb589j1.apps.googleusercontent.com",
-      "699594613448-n77nq7n8sp97m84hm72vnmg4smn853v2.apps.googleusercontent.com",
+      ...envAudiences,
     ].filter(Boolean);
 
     if (idToken) {
