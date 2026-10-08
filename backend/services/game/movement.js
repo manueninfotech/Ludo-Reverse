@@ -279,6 +279,7 @@ export const calculateMovement = ({
   coin,
   diceValue,
   direction,
+  playerCoins,
 }) => {
   const board =
     getBoardConfig(playerCount);
@@ -588,6 +589,28 @@ export const calculateMovement = ({
             )
           : null;
 
+      // Two coins of the same color cannot occupy the same non-safe cell
+      if (
+        newArea === "main" &&
+        Number.isInteger(toAbsoluteCell) &&
+        !board.safeCells.includes(toAbsoluteCell) &&
+        Array.isArray(playerCoins)
+      ) {
+        const hasSameColorCoin = playerCoins.some((c) => {
+          if (c.coinId === coin.coinId || c.area !== "main") return false;
+          const otherCell = getAbsoluteCell(playerColor, c.progress, playerCount);
+          return otherCell === toAbsoluteCell;
+        });
+
+        if (hasSameColorCoin) {
+          return {
+            legal: false,
+            reason:
+              "Cannot land on another coin of the same color outside safe cells.",
+          };
+        }
+      }
+
       return {
         legal: true,
 
@@ -654,6 +677,27 @@ export const calculateMovement = ({
           playerCount
         );
 
+      // Two coins of the same color cannot occupy the same non-safe cell
+      if (
+        Number.isInteger(toAbsoluteCell) &&
+        !board.safeCells.includes(toAbsoluteCell) &&
+        Array.isArray(playerCoins)
+      ) {
+        const hasSameColorCoin = playerCoins.some((c) => {
+          if (c.coinId === coin.coinId || c.area !== "main") return false;
+          const otherCell = getAbsoluteCell(playerColor, c.progress, playerCount);
+          return otherCell === toAbsoluteCell;
+        });
+
+        if (hasSameColorCoin) {
+          return {
+            legal: false,
+            reason:
+              "Cannot land on another coin of the same color outside safe cells.",
+          };
+        }
+      }
+
       return {
         legal: true,
 
@@ -698,6 +742,7 @@ export const getLegalDirections = ({
   playerCount,
   coin,
   diceValue,
+  playerCoins,
 }) => {
   const directions = [];
 
@@ -709,6 +754,7 @@ export const getLegalDirections = ({
       diceValue,
       direction:
         "forward",
+      playerCoins,
     });
 
   if (
@@ -727,6 +773,7 @@ export const getLegalDirections = ({
       diceValue,
       direction:
         "backward",
+      playerCoins,
     });
 
   if (
@@ -749,6 +796,7 @@ export const canCoinMove = ({
   playerCount,
   coin,
   diceValue,
+  playerCoins,
 }) => {
   const directions =
     getLegalDirections({
@@ -756,6 +804,7 @@ export const canCoinMove = ({
       playerCount,
       coin,
       diceValue,
+      playerCoins,
     });
 
   return (
@@ -791,6 +840,7 @@ export const getPossibleMoves = ({
         playerCount,
         coin,
         diceValue,
+        playerCoins: coins,
       });
 
     for (
@@ -812,6 +862,7 @@ export const getPossibleMoves = ({
           coin,
           diceValue,
           direction,
+          playerCoins: coins,
         });
 
       if (

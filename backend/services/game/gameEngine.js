@@ -386,6 +386,7 @@ export const getCoinLegalMoves = ({
     playerCount: game.playerCount,
     coin,
     diceValue: game.currentTurn.diceValue,
+    playerCoins: currentPlayer.coins,
   });
 };
 
@@ -541,6 +542,7 @@ export const moveCoin = ({
     coin,
     diceValue,
     direction,
+    playerCoins: player.coins,
   });
 
   if (!movement.legal) {

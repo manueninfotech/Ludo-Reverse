@@ -753,6 +753,44 @@ test(
   getAreaFromProgress(56, 4) === "finished"
 );
 
+console.log("\n========== SAME-COLOR NON-SAFE CELL TESTS ==========\n");
+
+const redCoin1 = { coinId: "c1", area: "main", progress: 2 };
+const redCoin2 = { coinId: "c2", area: "main", progress: 5 }; // absolute cell (39 + 5) % 52 = 44 (non-safe)
+
+const blockedMove = calculateMovement({
+  playerColor: "red",
+  playerCount: 4,
+  coin: redCoin1,
+  diceValue: 3, // lands on progress 5 (cell 44)
+  direction: "forward",
+  playerCoins: [redCoin1, redCoin2],
+});
+
+test(
+  "Two coins of same color cannot occupy the same non-safe cell",
+  blockedMove.legal === false &&
+    blockedMove.reason.includes("Cannot land on another coin of the same color")
+);
+
+// Safe cell test: cell 47 is safe cell in 4-player. Red progress 8 = (39 + 8) % 52 = 47 (safe)
+const redCoinSafe1 = { coinId: "c1", area: "main", progress: 6 };
+const redCoinSafe2 = { coinId: "c2", area: "main", progress: 8 };
+
+const allowedSafeMove = calculateMovement({
+  playerColor: "red",
+  playerCount: 4,
+  coin: redCoinSafe1,
+  diceValue: 2, // lands on progress 8 (cell 47, safe)
+  direction: "forward",
+  playerCoins: [redCoinSafe1, redCoinSafe2],
+});
+
+test(
+  "Two coins of same color CAN share a safe cell",
+  allowedSafeMove.legal === true && allowedSafeMove.toAbsoluteCell === 47
+);
+
 
 // ============================================================
 // FINAL RESULT
