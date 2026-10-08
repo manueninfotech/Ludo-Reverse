@@ -265,17 +265,24 @@ export const getMyMatchHistory = async (req, res) => {
 
 export const recordUserMatch = async (req, res) => {
   try {
-    const { result, gameType, score, coinsAwarded, isWin, playedAt, roomId } = req.body;
+    const { result, gameType, coinsAwarded, isWin, playedAt, roomId } = req.body;
+
+    const validatedResult = result === "WIN" ? "WIN" : "LOSS";
+    const validatedIsWin = Boolean(isWin ?? (validatedResult === "WIN"));
+    const safeCoins = typeof coinsAwarded === "number" ? Math.max(0, Math.min(1000, Math.floor(coinsAwarded))) : 0;
+    const safeGameType = typeof gameType === "string" ? gameType.trim().slice(0, 40) : "Classic Match";
+    const safeScore = safeCoins > 0 ? `+${safeCoins} Coins` : "+0 Coins";
+    const safeRoomId = typeof roomId === "string" ? roomId.trim().slice(0, 20) : null;
 
     const match = await MatchRecord.create({
       userId: req.user.userId,
-      result: result === "WIN" ? "WIN" : "LOSS",
-      gameType: typeof gameType === "string" ? gameType.trim() : "Classic Match",
-      score: typeof score === "string" ? score : "+0 Coins",
-      coinsAwarded: typeof coinsAwarded === "number" ? coinsAwarded : 0,
-      isWin: Boolean(isWin),
-      roomId: typeof roomId === "string" ? roomId : null,
-      playedAt: playedAt ? new Date(playedAt) : new Date(),
+      result: validatedResult,
+      gameType: safeGameType,
+      score: safeScore,
+      coinsAwarded: safeCoins,
+      isWin: validatedIsWin,
+      roomId: safeRoomId,
+      playedAt: playedAt && !isNaN(new Date(playedAt).getTime()) ? new Date(playedAt) : new Date(),
     });
 
     return res.status(201).json({

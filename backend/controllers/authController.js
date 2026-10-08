@@ -70,6 +70,14 @@ export const signup = async (req, res) => {
       });
     }
 
+    if (!/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Password must contain at least one letter and one number.",
+      });
+    }
+
     // -----------------------------
     // Check existing user
     // -----------------------------
@@ -218,7 +226,7 @@ export const login = async (req, res) => {
           email: normalizedIdentifier,
         },
       ],
-    });
+    }).select("+passwordHash");
 
     // Use the same message for both
     // cases so we don't reveal whether

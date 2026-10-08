@@ -57,46 +57,56 @@ export const claimDailyReward = async (userId) => {
     throw new Error("User ID is required.");
   }
 
-  let reward = await DailyReward.findOne({ userId });
+  // Ensure record exists
+  await DailyReward.updateOne(
+    { userId },
+    {
+      $setOnInsert: {
+        userId,
+        currentDay: 1,
+        lastClaimedAt: null,
+      },
+    },
+    { upsert: true }
+  );
 
-  if (!reward) {
-    reward = await DailyReward.create({
+  const now = new Date();
+  const cooldownThreshold = new Date(now.getTime() - CLAIM_COOLDOWN);
+
+  // Atomically acquire claim: only succeeds if cooldown has passed or first claim
+  const rewardBeforeClaim = await DailyReward.findOneAndUpdate(
+    {
       userId,
-      currentDay: 1,
-      lastClaimedAt: null,
-    });
+      $or: [
+        { lastClaimedAt: null },
+        { lastClaimedAt: { $lte: cooldownThreshold } },
+      ],
+    },
+    {
+      $set: { lastClaimedAt: now },
+    },
+    { returnDocument: "before" }
+  );
+
+  if (!rewardBeforeClaim) {
+    throw new Error("Daily reward is not available yet.");
   }
 
-  const now = Date.now();
-
-  if (
-    reward.lastClaimedAt &&
-    now - reward.lastClaimedAt.getTime() <
-      CLAIM_COOLDOWN
-  ) {
-    throw new Error(
-      "Daily reward is not available yet."
-    );
-  }
-
-  const claimedDay = reward.currentDay;
-  const rewardAmount = DAILY_REWARDS[claimedDay];
+  const claimedDay = rewardBeforeClaim.currentDay;
+  const rewardAmount = DAILY_REWARDS[claimedDay] || 50;
 
   await addCoins(userId, rewardAmount);
 
-  reward.currentDay =
-    claimedDay === 7
-      ? 1
-      : claimedDay + 1;
-
-  reward.lastClaimedAt = new Date();
-
-  await reward.save();
+  const nextDay = claimedDay === 7 ? 1 : claimedDay + 1;
+  await DailyReward.updateOne(
+    { userId },
+    { $set: { currentDay: nextDay } }
+  );
 
   return {
     claimedDay,
     rewardAmount,
-    nextDay: reward.currentDay,
-    claimedAt: reward.lastClaimedAt,
+    nextDay,
+    claimedAt: now,
   };
 };

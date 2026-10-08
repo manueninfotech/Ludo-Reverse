@@ -2,6 +2,8 @@
 // REVERSE LUDO - SOCKET DISCONNECT TESTS
 // ============================================================
 
+import "dotenv/config";
+process.env.NODE_ENV = "test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { Server } from "socket.io";

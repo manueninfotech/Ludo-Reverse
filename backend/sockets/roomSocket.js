@@ -840,8 +840,16 @@ socket.on("start_game", async (data, callback) => {
 
 socket.on("roll_dice", async (data, callback) => {
 
-  const { roomId, diceValue } = data;
+  const { roomId } = data || {};
   const userId = socket.data.userId;
+
+  // Authoritative server-side dice generation (prevents client tampering)
+  // In automated test environments, allow test runner to supply deterministic value
+  const isTestEnv = process.env.NODE_ENV === "test";
+  const diceValue =
+    isTestEnv && Number.isInteger(data?.diceValue) && data.diceValue >= 1 && data.diceValue <= 6
+      ? data.diceValue
+      : Math.floor(Math.random() * 6) + 1;
 
   // Get room
   const room = getRoom({ roomId });
