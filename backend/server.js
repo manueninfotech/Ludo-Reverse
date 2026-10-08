@@ -5,7 +5,7 @@ import dotenv from "dotenv";
 import { Server } from "socket.io";
 
 import connectDB from "./config/db.js";
-import { registerRoomSocket } from "./sockets/roomSocket.js";
+import { registerRoomSocket } from "./sockets/index.js";
 import authRoutes from "./routes/authRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
 import dailyRewardRoutes from "./routes/dailyRewardRoutes.js";

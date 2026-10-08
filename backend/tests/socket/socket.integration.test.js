@@ -8,7 +8,7 @@ import http from "node:http";
 import { Server } from "socket.io";
 import { io as createClient } from "socket.io-client";
 
-import { registerRoomSocket } from "../../sockets/roomSocket.js";
+import { registerRoomSocket } from "../../sockets/index.js";
 
 import connectDB from "../../config/db.js";
 import User from "../../models/User.js";

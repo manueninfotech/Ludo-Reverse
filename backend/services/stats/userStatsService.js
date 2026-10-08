@@ -71,6 +71,9 @@ export const recordGameResult = async ({
   position,
   killsInGame = 0,
   tokensCapturedInGame = 0,
+  forwardMovesInGame = 0,
+  backwardMovesInGame = 0,
+  totalMovesInGame = 0,
 }) => {
   if (!userId) return;
 
@@ -84,6 +87,21 @@ export const recordGameResult = async ({
     tokensCapturedInGame > 0
       ? tokensCapturedInGame
       : 0;
+
+  const safeForwardMoves =
+    Number.isInteger(forwardMovesInGame) && forwardMovesInGame > 0
+      ? forwardMovesInGame
+      : 0;
+
+  const safeBackwardMoves =
+    Number.isInteger(backwardMovesInGame) && backwardMovesInGame > 0
+      ? backwardMovesInGame
+      : 0;
+
+  const safeTotalMoves =
+    Number.isInteger(totalMovesInGame) && totalMovesInGame > 0
+      ? totalMovesInGame
+      : (safeForwardMoves + safeBackwardMoves);
 
   // --------------------------------------------------------
   // 1ST PLACE
@@ -101,6 +119,9 @@ export const recordGameResult = async ({
           currentWinStreak: 1,
           totalKills: safeKills,
           totalTokensCaptured: safeTokensCaptured,
+          totalForwardMoves: safeForwardMoves,
+          totalBackwardMoves: safeBackwardMoves,
+          totalMoves: safeTotalMoves,
         },
       },
       {
@@ -128,6 +149,9 @@ export const recordGameResult = async ({
           gamesWon: 1,
           totalKills: safeKills,
           totalTokensCaptured: safeTokensCaptured,
+          totalForwardMoves: safeForwardMoves,
+          totalBackwardMoves: safeBackwardMoves,
+          totalMoves: safeTotalMoves,
         },
 
         $set: {
@@ -159,6 +183,9 @@ export const recordGameResult = async ({
           gamesLost: 1,
           totalKills: safeKills,
           totalTokensCaptured: safeTokensCaptured,
+          totalForwardMoves: safeForwardMoves,
+          totalBackwardMoves: safeBackwardMoves,
+          totalMoves: safeTotalMoves,
         },
 
         $set: {
@@ -245,6 +272,16 @@ export const recordCompletedGame = async ({
       const tokensCapturedInGame =
         playerStats[userId]?.tokensCaptured || 0;
 
+      const forwardMovesInGame =
+        playerStats[userId]?.forwardMoves || 0;
+
+      const backwardMovesInGame =
+        playerStats[userId]?.backwardMoves || 0;
+
+      const totalMovesInGame =
+        playerStats[userId]?.totalMoves ||
+        (forwardMovesInGame + backwardMovesInGame);
+
       let playerResult;
 
       if (position === game.players.length) {
@@ -280,6 +317,9 @@ export const recordCompletedGame = async ({
         position,
         killsInGame,
         tokensCapturedInGame,
+        forwardMovesInGame,
+        backwardMovesInGame,
+        totalMovesInGame,
       });
 
       const updatedStats =
@@ -307,8 +347,10 @@ export const recordCompletedGame = async ({
         result: playerResult,
         position,
         kills: killsInGame,
-        tokensCaptured:
-          tokensCapturedInGame,
+        tokensCaptured: tokensCapturedInGame,
+        forwardMoves: forwardMovesInGame,
+        backwardMoves: backwardMovesInGame,
+        totalMoves: totalMovesInGame,
         coinsEarned,
         winStreak:
           updatedStats.currentWinStreak,
