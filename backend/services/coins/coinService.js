@@ -103,11 +103,12 @@ export const deductEntryFee = async (userId) => {
   };
 };
 
-export const deductEntryFees = async (userIds) => {
+export const deductEntryFees = async (userIds, entryFee = ENTRY_FEE) => {
   if (!Array.isArray(userIds) || userIds.length === 0) {
     throw new Error("Players are required.");
   }
 
+  const fee = Number(entryFee) > 0 ? Number(entryFee) : ENTRY_FEE;
   const uniqueUserIds = [...new Set(userIds)];
 
   const session = await mongoose.startSession();
@@ -134,12 +135,12 @@ export const deductEntryFees = async (userIds) => {
 
       // Check EVERY player before deducting anything.
       const playerWithoutEnoughCoins = users.find(
-        (user) => (user.coins ?? 0) < ENTRY_FEE
+        (user) => (user.coins ?? 0) < fee
       );
 
       if (playerWithoutEnoughCoins) {
         throw new Error(
-          `All players need at least ${ENTRY_FEE} coins to start the game.`
+          `All players need at least ${fee} coins to start the game.`
         );
       }
 
@@ -148,11 +149,11 @@ export const deductEntryFees = async (userIds) => {
         const updatedUser = await User.findOneAndUpdate(
           {
             userId,
-            coins: { $gte: ENTRY_FEE },
+            coins: { $gte: fee },
           },
           {
             $inc: {
-              coins: -ENTRY_FEE,
+              coins: -fee,
             },
           },
           {
@@ -169,7 +170,7 @@ export const deductEntryFees = async (userIds) => {
 
         results.push({
           userId,
-          deducted: ENTRY_FEE,
+          deducted: fee,
           remainingCoins: updatedUser.coins,
         });
       }

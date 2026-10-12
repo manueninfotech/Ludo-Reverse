@@ -715,6 +715,7 @@ export const googleLogin = async (req, res) => {
         displayName: user.displayName,
         avatar: user.avatar,
         coins: user.coins,
+        isEmailVerified: user.isEmailVerified,
         status: user.status,
         lastLoginAt: user.lastLoginAt,
       },
@@ -728,3 +729,160 @@ export const googleLogin = async (req, res) => {
     });
   }
 };
+
+// ============================================================
+// FORGOT PASSWORD
+// POST /api/auth/forgot-password
+// ============================================================
+export const forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email || typeof email !== "string") {
+      return res.status(400).json({ success: false, message: "Valid email is required." });
+    }
+    const cleanEmail = email.trim().toLowerCase();
+    const user = await User.findOne({ email: cleanEmail, status: { $ne: "deleted" } });
+    if (!user) {
+      return res.status(404).json({ success: false, message: "No account found with this email." });
+    }
+
+    const resetOtp = Math.floor(100000 + Math.random() * 900000).toString();
+    user.resetPasswordOtp = resetOtp;
+    user.resetPasswordExpires = new Date(Date.now() + 15 * 60 * 1000); // 15 mins
+    await user.save();
+
+    console.log(`[PASSWORD RESET] Code for ${cleanEmail}: ${resetOtp}`);
+
+    return res.status(200).json({
+      success: true,
+      message: "Password reset code sent successfully.",
+      resetCode: resetOtp,
+    });
+  } catch (error) {
+    console.error("Forgot password error:", error);
+    return res.status(500).json({ success: false, message: "Unable to process password reset." });
+  }
+};
+
+// ============================================================
+// RESET PASSWORD
+// POST /api/auth/reset-password
+// ============================================================
+export const resetPassword = async (req, res) => {
+  try {
+    const { email, otp, newPassword } = req.body;
+    if (!email || !otp || !newPassword) {
+      return res.status(400).json({ success: false, message: "Email, reset code, and new password are required." });
+    }
+    if (typeof newPassword !== "string" || newPassword.length < 6) {
+      return res.status(400).json({ success: false, message: "Password must be at least 6 characters long." });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const user = await User.findOne({ email: cleanEmail, status: { $ne: "deleted" } })
+      .select("+resetPasswordOtp +resetPasswordExpires");
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: "No account found with this email." });
+    }
+
+    if (!user.resetPasswordOtp || user.resetPasswordOtp !== otp.toString().trim()) {
+      return res.status(400).json({ success: false, message: "Invalid reset code." });
+    }
+
+    if (!user.resetPasswordExpires || user.resetPasswordExpires < new Date()) {
+      return res.status(400).json({ success: false, message: "Reset code has expired. Please request a new one." });
+    }
+
+    const hashedPassword = await hashPassword(newPassword);
+    user.passwordHash = hashedPassword;
+    user.resetPasswordOtp = null;
+    user.resetPasswordExpires = null;
+    await user.save();
+
+    // Revoke previous refresh tokens
+    await RefreshToken.deleteMany({ userId: user.userId });
+
+    return res.status(200).json({
+      success: true,
+      message: "Password has been successfully updated! You can now log in.",
+    });
+  } catch (error) {
+    console.error("Reset password error:", error);
+    return res.status(500).json({ success: false, message: "Failed to reset password." });
+  }
+};
+
+// ============================================================
+// SEND EMAIL VERIFICATION CODE
+// POST /api/users/resend-verification
+// ============================================================
+export const sendEmailVerification = async (req, res) => {
+  try {
+    const user = req.user;
+    if (!user) {
+      return res.status(401).json({ success: false, message: "Unauthorized." });
+    }
+    if (user.isEmailVerified) {
+      return res.status(400).json({ success: false, message: "Email is already verified." });
+    }
+
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    user.emailVerificationCode = code;
+    user.emailVerificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    await user.save();
+
+    console.log(`[EMAIL VERIFY] Code for ${user.email}: ${code}`);
+
+    return res.status(200).json({
+      success: true,
+      message: "Verification code sent successfully.",
+      verificationCode: code,
+    });
+  } catch (error) {
+    console.error("Send verification error:", error);
+    return res.status(500).json({ success: false, message: "Failed to send verification code." });
+  }
+};
+
+// ============================================================
+// VERIFY EMAIL
+// POST /api/users/verify-email
+// ============================================================
+export const verifyEmail = async (req, res) => {
+  try {
+    const user = await User.findOne({ userId: req.user.userId })
+      .select("+emailVerificationCode +emailVerificationExpires");
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found." });
+    }
+
+    const { code } = req.body;
+    if (!code || typeof code !== "string") {
+      return res.status(400).json({ success: false, message: "Verification code is required." });
+    }
+
+    if (!user.emailVerificationCode || user.emailVerificationCode !== code.trim()) {
+      return res.status(400).json({ success: false, message: "Invalid verification code." });
+    }
+
+    if (user.emailVerificationExpires && user.emailVerificationExpires < new Date()) {
+      return res.status(400).json({ success: false, message: "Verification code has expired." });
+    }
+
+    user.isEmailVerified = true;
+    user.emailVerificationCode = null;
+    user.emailVerificationExpires = null;
+    await user.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Email successfully verified!",
+      isEmailVerified: true,
+    });
+  } catch (error) {
+    console.error("Verify email error:", error);
+    return res.status(500).json({ success: false, message: "Verification failed." });
+  }
+};

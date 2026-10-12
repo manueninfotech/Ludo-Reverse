@@ -123,12 +123,6 @@ export const registerGameHandler = (io, socket) => {
         });
       }
 
-      room.game = nextTurnResult.game;
-      startTurnTimer({
-        io,
-        room,
-      });
-
       // Send response to player who rolled
       callback?.({
         success: true,
@@ -149,15 +143,23 @@ export const registerGameHandler = (io, socket) => {
         reason: "No legal moves. Turn passed to next player.",
       });
 
-      // Notify everyone that the turn has passed to the next player
+      // Notify everyone that the turn has passed to the next player after dice animation displays
       setTimeout(() => {
         if (room?.game) {
+          room.game = nextTurnResult.game;
           io.to(roomId).emit("turn_changed", {
             game: room.game,
             turnPassed: true,
           });
+
+          if (room.game.status === "playing") {
+            startTurnTimer({
+              io,
+              room,
+            });
+          }
         }
-      }, 700);
+      }, 1600);
 
       return;
     }

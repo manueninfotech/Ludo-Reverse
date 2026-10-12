@@ -64,6 +64,35 @@ const userSchema = new mongoose.Schema(
       default: "active",
     },
 
+    isEmailVerified: {
+      type: Boolean,
+      default: false,
+    },
+
+    emailVerificationCode: {
+      type: String,
+      default: null,
+      select: false,
+    },
+
+    emailVerificationExpires: {
+      type: Date,
+      default: null,
+      select: false,
+    },
+
+    resetPasswordOtp: {
+      type: String,
+      default: null,
+      select: false,
+    },
+
+    resetPasswordExpires: {
+      type: Date,
+      default: null,
+      select: false,
+    },
+
     lastLoginAt: {
       type: Date,
       default: null,

@@ -9,6 +9,11 @@ import {
   deleteMyAccount,
 } from "../controllers/userController.js";
 
+import {
+  verifyEmail,
+  sendEmailVerification,
+} from "../controllers/authController.js";
+
 import { requireAuth } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
@@ -47,6 +52,18 @@ router.post(
   "/matches",
   requireAuth,
   recordUserMatch
+);
+
+router.post(
+  "/verify-email",
+  requireAuth,
+  verifyEmail
+);
+
+router.post(
+  "/resend-verification",
+  requireAuth,
+  sendEmailVerification
 );
 
 export default router;

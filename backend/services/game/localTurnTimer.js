@@ -112,6 +112,7 @@ export const disconnectLocalTimedOutPlayer = ({
       status: "finished",
 
       winnerId: winner.userId,
+      finishOrder: [winner.userId, ...updatedGame.players.filter(p => p.userId !== winner.userId).map(p => p.userId)],
 
       currentTurn: {
         ...updatedGame.currentTurn,

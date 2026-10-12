@@ -334,10 +334,12 @@ export const recordCompletedGame = async ({
       // ------------------------------------------------------
 
       const coinsEarned =
-        getCoinRewardForPosition({
-          position,
-          playerCount: game.players.length,
-        });
+        (position === 1 && game.prizePool && game.prizePool > 0)
+          ? game.prizePool
+          : getCoinRewardForPosition({
+              position,
+              playerCount: game.players.length,
+            });
 
       if (coinsEarned > 0) {
         await addCoins(

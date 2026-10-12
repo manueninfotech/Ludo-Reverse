@@ -249,9 +249,10 @@ export const registerRoomHandler = (io, socket) => {
       // Deduct Entry Fee if database is connected
       if (mongoose.connection.readyState === 1 && humanPlayerIds.length > 0) {
         try {
-          await deductEntryFees(humanPlayerIds);
+          const entryFee = room.stake || 100;
+          await deductEntryFees(humanPlayerIds, entryFee);
           console.log(
-            `Entry fee deducted from ${humanPlayerIds.length} players in room ${room.roomId}`
+            `Entry fee (${entryFee}) deducted from ${humanPlayerIds.length} players in room ${room.roomId}`
           );
         } catch (error) {
           console.error("Failed to deduct game entry fee:", error);

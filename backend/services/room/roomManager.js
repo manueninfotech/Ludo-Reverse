@@ -86,6 +86,8 @@ export const createRoom = ({
   maxPlayers = 2,
   color,
   avatar,
+  stake = 100,
+  prizePool,
 }) => {
 
   if (![2, 3, 4, 5, 6, 7, 8].includes(maxPlayers)) {
@@ -120,10 +122,15 @@ export const createRoom = ({
     avatar: avatar || null,
   };
 
+  const numericStake = Number(stake) > 0 ? Number(stake) : 100;
+  const numericPrizePool = Number(prizePool) > 0 ? Number(prizePool) : (numericStake * maxPlayers);
+
   const room = {
     roomId,
     hostId,
     maxPlayers,
+    stake: numericStake,
+    prizePool: numericPrizePool,
     status: "waiting",
 
     players: [
@@ -417,6 +424,8 @@ export const startGame = ({
   });
 
   game.roomId = room.roomId;
+  game.stake = room.stake || 100;
+  game.prizePool = room.prizePool || ((room.stake || 100) * room.maxPlayers);
   room.status = "playing";
   room.game = game;
 

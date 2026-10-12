@@ -149,17 +149,19 @@ export const registerLocalGameHandler = (io, socket) => {
         reason: "No legal moves. Turn passed to next player.",
       });
 
-      io.to(gameId).emit("local_turn_changed", {
-        game: updatedGame,
-        auto: true,
-      });
-
-      if (updatedGame.status === "playing") {
-        startLocalTurnTimer({
-          io,
-          gameId,
+      setTimeout(() => {
+        io.to(gameId).emit("local_turn_changed", {
+          game: updatedGame,
+          auto: true,
         });
-      }
+
+        if (updatedGame.status === "playing") {
+          startLocalTurnTimer({
+            io,
+            gameId,
+          });
+        }
+      }, 1600);
 
       return;
     }

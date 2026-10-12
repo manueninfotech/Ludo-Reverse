@@ -245,11 +245,13 @@ const disconnectTimedOutPlayer = async ({
   // 2-player game: remaining player wins immediately.
   if (remainingActivePlayers.length === 1) {
     const winner = remainingActivePlayers[0];
+    const loser = room.game.players.find((p) => p.userId !== winner.userId);
 
     room.game = {
       ...room.game,
       status: "finished",
       winnerId: winner.userId,
+      finishOrder: [winner.userId, ...(loser ? [loser.userId] : [])],
       currentTurn: {
         ...room.game.currentTurn,
         turnExpiresAt: null,
@@ -455,23 +457,22 @@ export const handleTurnTimeout = async ({
         return;
       }
 
-      room.game = nextTurnResult.game;
-
       setTimeout(() => {
         if (room?.game) {
+          room.game = nextTurnResult.game;
           io.to(room.roomId).emit("turn_changed", {
             game: room.game,
             auto: true,
           });
-        }
-      }, 700);
 
-      if (room.game.status === "playing") {
-        startTurnTimer({
-          io,
-          room,
-        });
-      }
+          if (room.game.status === "playing") {
+            startTurnTimer({
+              io,
+              room,
+            });
+          }
+        }
+      }, 1600);
 
       return;
     }
