@@ -32,6 +32,22 @@ const matchRecordSchema = new mongoose.Schema(
       type: String,
       default: null,
     },
+    playerIds: {
+      type: [String],
+      default: [],
+    },
+    players: {
+      type: [
+        {
+          userId: String,
+          name: String,
+          color: String,
+          position: Number,
+          isWin: Boolean,
+        },
+      ],
+      default: [],
+    },
     playedAt: {
       type: Date,
       default: Date.now,

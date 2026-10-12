@@ -4,6 +4,10 @@ import {
   leaveRoom,
   startGame,
   getRoom,
+  deleteRoom,
+  addBotToRoom,
+  fillRoomWithBots,
+  removeBotFromRoom,
 } from "../../services/room/roomManager.js";
 
 import mongoose from "mongoose";
@@ -182,6 +186,12 @@ export const registerRoomHandler = (io, socket) => {
       players: [...room.players],
     });
 
+    // Notify room that player reconnected
+    io.to(room.roomId).emit("player_reconnected", {
+      userId,
+      roomId: room.roomId,
+    });
+
     // If a game is running, send the current timer state without resetting
     if (
       room.game &&
@@ -217,9 +227,19 @@ export const registerRoomHandler = (io, socket) => {
         });
       }
 
-      const playerIds = room.players.map((player) => player.userId);
+      const hostId = socket.data.userId || data?.userId;
 
-      if (playerIds.length === 0) {
+      // Auto-fill bots if requested or if host starts with unfilled slots
+      if (data?.fillWithBots || data?.autoFill) {
+        fillRoomWithBots({ roomId: data.roomId, hostId });
+      }
+
+      // Only deduct entry fees from human players, not bots
+      const humanPlayerIds = room.players
+        .filter((player) => !player.isBot)
+        .map((player) => player.userId);
+
+      if (room.players.length === 0) {
         return callback?.({
           success: false,
           reason: "No players in the room.",
@@ -227,11 +247,11 @@ export const registerRoomHandler = (io, socket) => {
       }
 
       // Deduct Entry Fee if database is connected
-      if (mongoose.connection.readyState === 1) {
+      if (mongoose.connection.readyState === 1 && humanPlayerIds.length > 0) {
         try {
-          await deductEntryFees(playerIds);
+          await deductEntryFees(humanPlayerIds);
           console.log(
-            `Entry fee deducted from ${playerIds.length} players in room ${room.roomId}`
+            `Entry fee deducted from ${humanPlayerIds.length} players in room ${room.roomId}`
           );
         } catch (error) {
           console.error("Failed to deduct game entry fee:", error);
@@ -242,7 +262,7 @@ export const registerRoomHandler = (io, socket) => {
         }
       }
 
-      const userId = socket.data.userId || data?.userId;
+      const userId = hostId;
       const result = startGame({
         roomId: data.roomId,
         userId,
@@ -293,6 +313,63 @@ export const registerRoomHandler = (io, socket) => {
         reason: "Failed to start the game.",
       });
     }
+  });
+
+  // --------------------------------------------------------
+  // ADD BOT TO ROOM
+  // --------------------------------------------------------
+  socket.on("add_bot", (data, callback) => {
+    const { roomId } = data || {};
+    const hostId = socket.data.userId || data?.hostId;
+    const result = addBotToRoom({ roomId, hostId });
+
+    if (!result.success) {
+      return callback?.(result);
+    }
+
+    callback?.(result);
+    io.to(roomId).emit("room_updated", {
+      ...result.room,
+      players: [...result.room.players],
+    });
+  });
+
+  // --------------------------------------------------------
+  // FILL ROOM WITH BOTS
+  // --------------------------------------------------------
+  socket.on("fill_bots", (data, callback) => {
+    const { roomId } = data || {};
+    const hostId = socket.data.userId || data?.hostId;
+    const result = fillRoomWithBots({ roomId, hostId });
+
+    if (!result.success) {
+      return callback?.(result);
+    }
+
+    callback?.(result);
+    io.to(roomId).emit("room_updated", {
+      ...result.room,
+      players: [...result.room.players],
+    });
+  });
+
+  // --------------------------------------------------------
+  // REMOVE BOT FROM ROOM
+  // --------------------------------------------------------
+  socket.on("remove_bot", (data, callback) => {
+    const { roomId, botId } = data || {};
+    const hostId = socket.data.userId || data?.hostId;
+    const result = removeBotFromRoom({ roomId, hostId, botId });
+
+    if (!result.success) {
+      return callback?.(result);
+    }
+
+    callback?.(result);
+    io.to(roomId).emit("room_updated", {
+      ...result.room,
+      players: [...result.room.players],
+    });
   });
 
   // --------------------------------------------------------
@@ -381,6 +458,9 @@ export const registerRoomHandler = (io, socket) => {
       };
     });
 
+    const playerInGame = room.game?.players?.find((p) => p.userId === userId);
+    const missedTurns = playerInGame?.missedTurns ?? 0;
+
     // Notify remaining players
     io.to(roomId).emit("room_updated", {
       ...room,
@@ -390,79 +470,36 @@ export const registerRoomHandler = (io, socket) => {
     io.to(roomId).emit("player_disconnected", {
       userId,
       roomId,
+      missedTurns,
     });
 
-    const connectedPlayers =
-      room.game?.players?.filter(
-        (player) => player.isConnected !== false
-      ) || [];
+    // Check if any human player is still connected in this room
+    const anyHumanConnected = room.players.some(
+      (player) => !player.isBot && player.isConnected !== false
+    );
 
-    // If only one player is left connected in an active game, declare them winner
-    if (
-      room.game &&
-      room.game.status === "playing" &&
-      connectedPlayers.length === 1
-    ) {
-      const winner = connectedPlayers[0];
-
+    // If ALL human players have disconnected, clean up the room
+    if (!anyHumanConnected) {
       clearTurnTimer({ roomId });
-
-      room.game = {
-        ...room.game,
-        status: "finished",
-        winnerId: winner.userId,
-        currentTurn: {
-          ...room.game.currentTurn,
-          turnExpiresAt: null,
-        },
-      };
-
-      try {
-        await recordCompletedGame({
-          game: room.game,
-          result: "disconnected",
-        });
-      } catch (error) {
-        console.error(
-          "Failed to record disconnected game statistics:",
-          error
-        );
-      }
-
-      io.to(roomId).emit("game_finished", {
-        game: room.game,
-        winner,
-        reason: "opponent_disconnected",
-      });
-
+      deleteRoom({ roomId });
       return;
     }
 
-    // If the disconnecting player was the current active turn player, advance turn
+    // In Ludo King style: Do NOT forfeit the game immediately!
+    // The disconnected player gets up to 5 auto-move chances.
+    // If the disconnecting player was the current active turn player,
+    // ensure turn timer continues for the full 30 seconds so auto-move kicks in if they don't reconnect.
     if (
       room.game &&
       room.game.status === "playing" &&
       room.game.currentTurn?.playerId === userId
     ) {
       clearTurnTimer({ roomId });
-
-      const result = completeGameTurn({
+      startTurnTimer({
+        io,
+        roomId,
         game: room.game,
       });
-
-      if (result.success) {
-        room.game = result.game;
-
-        io.to(roomId).emit("turn_changed", {
-          game: room.game,
-        });
-
-        startTurnTimer({
-          io,
-          roomId,
-          game: room.game,
-        });
-      }
     }
   });
 };

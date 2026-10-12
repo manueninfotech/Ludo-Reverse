@@ -85,6 +85,7 @@ export const createRoom = ({
   hostName,
   maxPlayers = 2,
   color,
+  avatar,
 }) => {
 
   if (![2, 3, 4, 5, 6, 7, 8].includes(maxPlayers)) {
@@ -116,6 +117,7 @@ export const createRoom = ({
     color: hostColor,
     isHost: true,
     isConnected: true,
+    avatar: avatar || null,
   };
 
   const room = {
@@ -157,6 +159,7 @@ export const joinRoom = ({
   roomId,
   userId,
   name,
+  avatar,
 }) => {
 
   const room = rooms.get(roomId);
@@ -220,6 +223,7 @@ export const joinRoom = ({
     color: assignedColor,
     isHost: false,
     isConnected: true,
+    avatar: avatar || null,
   };
 
   room.players.push(player);
@@ -398,6 +402,7 @@ export const startGame = ({
       userId: player.userId,
       name: player.name,
       color: player.color,
+      isBot: player.isBot || false,
     })
   );
 
@@ -411,7 +416,7 @@ export const startGame = ({
     players: gamePlayers,
   });
 
-
+  game.roomId = room.roomId;
   room.status = "playing";
   room.game = game;
 
@@ -422,6 +427,110 @@ export const startGame = ({
   };
 };
 
+// ----------------------------------------------------------
+// Bot Room Management
+// ----------------------------------------------------------
+
+const BOT_NAMES = [
+  "NinjaBot",
+  "ShadowBot",
+  "RogueAI",
+  "CyberPawn",
+  "GhostBot",
+  "ViperAI",
+  "TitanBot",
+  "ZenBot",
+];
+
+export const addBotToRoom = ({ roomId, hostId }) => {
+  const room = rooms.get(roomId);
+  if (!room) {
+    return { success: false, reason: "Room not found." };
+  }
+  if (room.status !== "waiting") {
+    return { success: false, reason: "Game has already started." };
+  }
+  if (room.hostId !== hostId) {
+    return { success: false, reason: "Only the host can add bots." };
+  }
+  if (room.players.length >= room.maxPlayers) {
+    return { success: false, reason: "Room is full." };
+  }
+
+  const assignedColor = getNextAvailableColor({
+    maxPlayers: room.maxPlayers,
+    players: room.players,
+  });
+
+  if (!assignedColor) {
+    return { success: false, reason: "No player color is available." };
+  }
+
+  const usedNames = new Set(room.players.map((p) => p.name));
+  const botName =
+    BOT_NAMES.find((n) => !usedNames.has(n)) || `Bot ${room.players.length + 1}`;
+  const botId = `bot_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+
+  const bot = {
+    userId: botId,
+    name: botName,
+    color: assignedColor,
+    isHost: false,
+    isConnected: true,
+    isBot: true,
+  };
+
+  room.players.push(bot);
+
+  return { success: true, room, bot };
+};
+
+export const fillRoomWithBots = ({ roomId, hostId }) => {
+  const room = rooms.get(roomId);
+  if (!room) {
+    return { success: false, reason: "Room not found." };
+  }
+  if (room.status !== "waiting") {
+    return { success: false, reason: "Game has already started." };
+  }
+  if (room.hostId !== hostId) {
+    return { success: false, reason: "Only the host can fill room with bots." };
+  }
+
+  const addedBots = [];
+  while (room.players.length < room.maxPlayers) {
+    const res = addBotToRoom({ roomId, hostId });
+    if (!res.success) break;
+    addedBots.push(res.bot);
+  }
+
+  return { success: true, room, addedBots };
+};
+
+export const removeBotFromRoom = ({ roomId, hostId, botId }) => {
+  const room = rooms.get(roomId);
+  if (!room) {
+    return { success: false, reason: "Room not found." };
+  }
+  if (room.status !== "waiting") {
+    return { success: false, reason: "Game has already started." };
+  }
+  if (room.hostId !== hostId) {
+    return { success: false, reason: "Only the host can remove bots." };
+  }
+
+  const botIndex = room.players.findIndex(
+    (p) => p.userId === botId && p.isBot === true
+  );
+
+  if (botIndex === -1) {
+    return { success: false, reason: "Bot not found in room." };
+  }
+
+  room.players.splice(botIndex, 1);
+
+  return { success: true, room };
+};
 
 // ----------------------------------------------------------
 // Get All Rooms
@@ -439,4 +548,8 @@ export const getRooms = () => {
 
 export const clearRooms = () => {
   rooms.clear();
+};
+
+export const deleteRoom = ({ roomId }) => {
+  return rooms.delete(roomId);
 };

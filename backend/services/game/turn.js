@@ -132,10 +132,11 @@ export const getNextPlayer = ({
         (coin) => coin.area === "finished"
       );
 
-    const isDisconnected =
-      nextPlayer.isConnected === false;
+    const isEliminated =
+      nextPlayer.isEliminated === true ||
+      (nextPlayer.missedTurns ?? 0) >= 5;
 
-    if (!hasFinished && !isDisconnected) {
+    if (!hasFinished && !isEliminated) {
       return nextPlayer;
     }
   }

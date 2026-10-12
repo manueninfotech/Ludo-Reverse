@@ -103,6 +103,14 @@ export const recordGameResult = async ({
       ? totalMovesInGame
       : (safeForwardMoves + safeBackwardMoves);
 
+  // Calculate XP gained from match
+  let xpEarned = 20 + (safeKills * 10);
+  if (result === "won" && position === 1) {
+    xpEarned = 60 + (safeKills * 10);
+  } else if (result === "won") {
+    xpEarned = 40 + (safeKills * 10);
+  }
+
   // --------------------------------------------------------
   // 1ST PLACE
   // --------------------------------------------------------
@@ -122,6 +130,7 @@ export const recordGameResult = async ({
           totalForwardMoves: safeForwardMoves,
           totalBackwardMoves: safeBackwardMoves,
           totalMoves: safeTotalMoves,
+          xp: xpEarned,
         },
       },
       {
@@ -130,6 +139,14 @@ export const recordGameResult = async ({
         setDefaultsOnInsert: true,
       }
     );
+
+    const s = await UserStats.findOne({ userId });
+    if (s) {
+      const computedLevel = Math.max(1, Math.floor((s.xp || 0) / 500) + 1);
+      if (s.level !== computedLevel) {
+        await UserStats.updateOne({ userId }, { $set: { level: computedLevel } });
+      }
+    }
 
     return;
   }
@@ -152,6 +169,7 @@ export const recordGameResult = async ({
           totalForwardMoves: safeForwardMoves,
           totalBackwardMoves: safeBackwardMoves,
           totalMoves: safeTotalMoves,
+          xp: xpEarned,
         },
 
         $set: {
@@ -164,6 +182,14 @@ export const recordGameResult = async ({
         setDefaultsOnInsert: true,
       }
     );
+
+    const s = await UserStats.findOne({ userId });
+    if (s) {
+      const computedLevel = Math.max(1, Math.floor((s.xp || 0) / 500) + 1);
+      if (s.level !== computedLevel) {
+        await UserStats.updateOne({ userId }, { $set: { level: computedLevel } });
+      }
+    }
 
     return;
   }
@@ -186,6 +212,7 @@ export const recordGameResult = async ({
           totalForwardMoves: safeForwardMoves,
           totalBackwardMoves: safeBackwardMoves,
           totalMoves: safeTotalMoves,
+          xp: xpEarned,
         },
 
         $set: {
@@ -198,6 +225,14 @@ export const recordGameResult = async ({
         setDefaultsOnInsert: true,
       }
     );
+
+    const s = await UserStats.findOne({ userId });
+    if (s) {
+      const computedLevel = Math.max(1, Math.floor((s.xp || 0) / 500) + 1);
+      if (s.level !== computedLevel) {
+        await UserStats.updateOne({ userId }, { $set: { level: computedLevel } });
+      }
+    }
 
     return;
   }
@@ -237,12 +272,22 @@ export const recordCompletedGame = async ({
   }
 
   const finishOrder = Array.isArray(game.finishOrder)
-    ? game.finishOrder
+    ? [...game.finishOrder]
     : [];
 
-  if (finishOrder.length !== game.players.length) {
+  if (game.winnerId && !finishOrder.includes(game.winnerId)) {
+    finishOrder.unshift(game.winnerId);
+  }
+
+  for (const player of game.players) {
+    if (!finishOrder.includes(player.userId)) {
+      finishOrder.push(player.userId);
+    }
+  }
+
+  if (finishOrder.length === 0) {
     console.error(
-      `[STATS] Cannot finalize game ${game.roomId || ""}: finish order is incomplete.`
+      `[STATS] Cannot finalize game ${game.roomId || ""}: no players found in finish order.`
     );
 
     return {};
@@ -282,13 +327,7 @@ export const recordCompletedGame = async ({
         playerStats[userId]?.totalMoves ||
         (forwardMovesInGame + backwardMovesInGame);
 
-      let playerResult;
-
-      if (position === game.players.length) {
-        playerResult = "lost";
-      } else {
-        playerResult = "won";
-      }
+      let playerResult = position === 1 ? "won" : "lost";
 
       // ------------------------------------------------------
       // COIN REWARD
@@ -329,6 +368,19 @@ export const recordCompletedGame = async ({
       // MATCH RECORD LOG
       // ------------------------------------------------------
       try {
+        const allPlayerIds = game.players.map((p) => p.userId);
+        const matchPlayers = game.players.map((p) => {
+          const pIndex = finishOrder.indexOf(p.userId);
+          const pPos = pIndex !== -1 ? pIndex + 1 : game.players.length;
+          return {
+            userId: p.userId,
+            name: p.name,
+            color: p.color,
+            position: pPos,
+            isWin: pPos === 1,
+          };
+        });
+
         await MatchRecord.create({
           userId,
           result: playerResult === "won" ? "WIN" : "LOSS",
@@ -337,6 +389,8 @@ export const recordCompletedGame = async ({
           coinsAwarded: coinsEarned,
           isWin: playerResult === "won",
           roomId: game.roomId || null,
+          playerIds: allPlayerIds,
+          players: matchPlayers,
           playedAt: new Date(),
         });
       } catch (err) {

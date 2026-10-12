@@ -9,6 +9,7 @@ import { registerRoomSocket } from "./sockets/index.js";
 import authRoutes from "./routes/authRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
 import dailyRewardRoutes from "./routes/dailyRewardRoutes.js";
+import friendRoutes from "./routes/friendRoutes.js";
 import { socketAuthMiddleware } from "./middleware/socketAuthMiddleware.js";
 
 import helmet from "helmet";
@@ -103,6 +104,7 @@ app.use(
   "/api/daily-rewards",
   dailyRewardRoutes
 );
+app.use("/api/friends", friendRoutes);
 
 // --------------------------------------------------------
 // Test Route
@@ -126,6 +128,8 @@ const io = new Server(server, {
     credentials: true,
   },
 });
+
+app.set("io", io);
 
 // --------------------------------------------------------
 // Socket Authentication

@@ -149,6 +149,16 @@ export const registerGameHandler = (io, socket) => {
         reason: "No legal moves. Turn passed to next player.",
       });
 
+      // Notify everyone that the turn has passed to the next player
+      setTimeout(() => {
+        if (room?.game) {
+          io.to(roomId).emit("turn_changed", {
+            game: room.game,
+            turnPassed: true,
+          });
+        }
+      }, 700);
+
       return;
     }
 

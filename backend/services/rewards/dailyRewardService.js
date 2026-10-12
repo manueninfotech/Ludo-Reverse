@@ -11,7 +11,10 @@ const DAILY_REWARDS = {
   7: 500,
 };
 
+// 24 hours required between claims
 const CLAIM_COOLDOWN = 24 * 60 * 60 * 1000;
+// If more than 48 hours pass since last claim, the player missed their streak
+const STREAK_EXPIRY = 48 * 60 * 60 * 1000;
 
 export const getDailyRewardStatus = async (userId) => {
   if (!userId) {
@@ -30,13 +33,25 @@ export const getDailyRewardStatus = async (userId) => {
 
   const now = Date.now();
 
+  // If player missed the streak (> 48 hours since last claim),
+  // reset progress back to Day 1
+  if (
+    reward.lastClaimedAt &&
+    now - reward.lastClaimedAt.getTime() >= STREAK_EXPIRY &&
+    reward.currentDay !== 1
+  ) {
+    reward.currentDay = 1;
+    await DailyReward.updateOne(
+      { userId },
+      { $set: { currentDay: 1 } }
+    );
+  }
+
   const canClaim =
     !reward.lastClaimedAt ||
-    now - reward.lastClaimedAt.getTime() >=
-      CLAIM_COOLDOWN;
+    now - reward.lastClaimedAt.getTime() >= CLAIM_COOLDOWN;
 
-  const rewardAmount =
-    DAILY_REWARDS[reward.currentDay];
+  const rewardAmount = DAILY_REWARDS[reward.currentDay] || 50;
 
   return {
     currentDay: reward.currentDay,
@@ -45,10 +60,7 @@ export const getDailyRewardStatus = async (userId) => {
     canClaim,
     nextClaimAt: canClaim
       ? null
-      : new Date(
-          reward.lastClaimedAt.getTime() +
-            CLAIM_COOLDOWN
-        ),
+      : new Date(reward.lastClaimedAt.getTime() + CLAIM_COOLDOWN),
   };
 };
 
@@ -72,6 +84,20 @@ export const claimDailyReward = async (userId) => {
 
   const now = new Date();
   const cooldownThreshold = new Date(now.getTime() - CLAIM_COOLDOWN);
+  const streakExpiryThreshold = new Date(now.getTime() - STREAK_EXPIRY);
+
+  // If the player missed their streak (> 48 hours since last claim),
+  // reset currentDay back to Day 1 before claiming
+  await DailyReward.updateOne(
+    {
+      userId,
+      lastClaimedAt: { $lt: streakExpiryThreshold, $ne: null },
+      currentDay: { $ne: 1 },
+    },
+    {
+      $set: { currentDay: 1 },
+    }
+  );
 
   // Atomically acquire claim: only succeeds if cooldown has passed or first claim
   const rewardBeforeClaim = await DailyReward.findOneAndUpdate(

@@ -1,5 +1,6 @@
 import { getOrCreateUserStats } from "../services/stats/userStatsService.js";
 import MatchRecord from "../models/MatchRecord.js";
+import RefreshToken from "../models/RefreshToken.js";
 
 // ============================================================
 // USER RESPONSE
@@ -37,6 +38,7 @@ const getStatsData = (stats) => ({
   gamesDisconnected: stats.gamesDisconnected,
 
   totalKills: stats.totalKills,
+  totalTokensCaptured: stats.totalTokensCaptured || 0,
   totalCoinsFinished: stats.totalCoinsFinished,
   totalMoves: stats.totalMoves,
   totalSixes: stats.totalSixes,
@@ -48,6 +50,9 @@ const getStatsData = (stats) => ({
   currentWinStreak: stats.currentWinStreak,
 
   totalPlayTime: stats.totalPlayTime,
+
+  xp: stats.xp || 0,
+  level: stats.level || Math.max(1, Math.floor((stats.xp || 0) / 500) + 1),
 
   updatedAt: stats.updatedAt,
 });
@@ -242,6 +247,9 @@ export const getMyMatchHistory = async (req, res) => {
       score: m.score,
       coinsAwarded: m.coinsAwarded,
       isWin: m.isWin,
+      roomId: m.roomId,
+      playerIds: m.playerIds,
+      players: m.players,
       playedAt: m.playedAt,
     }));
 
@@ -265,7 +273,7 @@ export const getMyMatchHistory = async (req, res) => {
 
 export const recordUserMatch = async (req, res) => {
   try {
-    const { result, gameType, coinsAwarded, isWin, playedAt, roomId } = req.body;
+    const { result, gameType, coinsAwarded, isWin, playedAt, roomId, playerIds, players } = req.body;
 
     const validatedResult = result === "WIN" ? "WIN" : "LOSS";
     const validatedIsWin = Boolean(isWin ?? (validatedResult === "WIN"));
@@ -273,6 +281,8 @@ export const recordUserMatch = async (req, res) => {
     const safeGameType = typeof gameType === "string" ? gameType.trim().slice(0, 40) : "Classic Match";
     const safeScore = safeCoins > 0 ? `+${safeCoins} Coins` : "+0 Coins";
     const safeRoomId = typeof roomId === "string" ? roomId.trim().slice(0, 20) : null;
+    const safePlayerIds = Array.isArray(playerIds) ? playerIds.map(String) : [];
+    const safePlayers = Array.isArray(players) ? players : [];
 
     const match = await MatchRecord.create({
       userId: req.user.userId,
@@ -282,6 +292,8 @@ export const recordUserMatch = async (req, res) => {
       coinsAwarded: safeCoins,
       isWin: validatedIsWin,
       roomId: safeRoomId,
+      playerIds: safePlayerIds,
+      players: safePlayers,
       playedAt: playedAt && !isNaN(new Date(playedAt).getTime()) ? new Date(playedAt) : new Date(),
     });
 
@@ -295,6 +307,9 @@ export const recordUserMatch = async (req, res) => {
         score: match.score,
         coinsAwarded: match.coinsAwarded,
         isWin: match.isWin,
+        roomId: match.roomId,
+        playerIds: match.playerIds,
+        players: match.players,
         playedAt: match.playedAt,
       },
     });
@@ -305,4 +320,43 @@ export const recordUserMatch = async (req, res) => {
       message: "Internal server error.",
     });
   }
-};
+};
+
+// ============================================================
+// DELETE MY ACCOUNT
+// DELETE /api/users/me
+// ============================================================
+
+export const deleteMyAccount = async (req, res) => {
+  try {
+    const user = req.user;
+
+    // Revoke and remove all active refresh tokens
+    await RefreshToken.deleteMany({ userId: user.userId });
+
+    // Anonymize user credentials and data
+    const timestamp = Date.now();
+    user.status = "deleted";
+    user.displayName = "Deleted Account";
+    user.email = `deleted_${user.userId}_${timestamp}@deleted.local`;
+    user.username = `deleted_${user.userId.slice(0, 8)}_${timestamp.toString().slice(-4)}`;
+    user.googleId = undefined;
+    user.passwordHash = null;
+    user.avatar = null;
+    user.coins = 0;
+
+    await user.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Your account and personal data have been successfully deleted.",
+    });
+  } catch (error) {
+    console.error("Delete account error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to delete account. Please try again.",
+    });
+  }
+};
+

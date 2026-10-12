@@ -97,6 +97,20 @@ const userStatsSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+
+    // Total experience points (XP) accumulated
+    xp: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    // Current player level calculated from XP
+    level: {
+      type: Number,
+      default: 1,
+      min: 1,
+    },
   },
   {
     timestamps: {

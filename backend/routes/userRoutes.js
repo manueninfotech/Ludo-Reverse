@@ -6,6 +6,7 @@ import {
   updateMySettings,
   getMyMatchHistory,
   recordUserMatch,
+  deleteMyAccount,
 } from "../controllers/userController.js";
 
 import { requireAuth } from "../middleware/authMiddleware.js";
@@ -22,6 +23,12 @@ router.patch(
   "/me",
   requireAuth,
   updateMyProfile
+);
+
+router.delete(
+  "/me",
+  requireAuth,
+  deleteMyAccount
 );
 
 router.put(
